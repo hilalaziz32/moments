@@ -1,0 +1,174 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * Moments design tokens.
+ *
+ * PRINCIPLE: colour encodes STATE, never decoration. The surface palette is a
+ * cool, quiet slate; saturated hues appear only to say what is happening to a
+ * celebration. A dashboard whose job is "nothing has been forgotten" should feel
+ * like a reliable ledger, not a party.
+ */
+:root {
+  --radius: 0.5rem;
+
+  /* Surfaces: cool slate, deliberately not the warm-cream default. */
+  --paper:        oklch(0.983 0.003 247);
+  --surface:      oklch(1 0 0);
+  --surface-sunk: oklch(0.968 0.005 247);
+
+  --ink:          oklch(0.239 0.031 258);   /* deep slate-navy, not tinted black */
+  --ink-muted:    oklch(0.498 0.022 257);
+  --ink-faint:    oklch(0.646 0.017 257);
+  --rule:         oklch(0.918 0.007 255);
+  --rule-strong:  oklch(0.858 0.010 255);
+
+  /* State. The ONLY saturated colour in the system. */
+  --state-done:     oklch(0.545 0.091 175);  /* delivered / confirmed  */
+  --state-active:   oklch(0.520 0.134 258);  /* in flight              */
+  --state-waiting:  oklch(0.686 0.128 76);   /* needs a human          */
+  --state-failed:   oklch(0.556 0.184 27);   /* missed / dead          */
+  --state-idle:     oklch(0.858 0.010 255);  /* not started            */
+
+  --background: var(--paper);
+  --foreground: var(--ink);
+  --card: var(--surface);
+  --card-foreground: var(--ink);
+  --popover: var(--surface);
+  --popover-foreground: var(--ink);
+  --primary: var(--ink);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: var(--surface-sunk);
+  --secondary-foreground: var(--ink);
+  --muted: var(--surface-sunk);
+  --muted-foreground: var(--ink-muted);
+  --accent: var(--surface-sunk);
+  --accent-foreground: var(--ink);
+  --destructive: var(--state-failed);
+  --border: var(--rule);
+  --input: var(--rule-strong);
+  --ring: var(--state-active);
+}
+
+.dark {
+  --paper:        oklch(0.191 0.024 258);
+  --surface:      oklch(0.233 0.024 258);
+  --surface-sunk: oklch(0.211 0.024 258);
+
+  --ink:          oklch(0.961 0.006 247);
+  --ink-muted:    oklch(0.719 0.018 257);
+  --ink-faint:    oklch(0.585 0.020 257);
+  --rule:         oklch(0.302 0.021 258);
+  --rule-strong:  oklch(0.378 0.022 258);
+
+  --state-done:     oklch(0.680 0.098 175);
+  --state-active:   oklch(0.680 0.130 258);
+  --state-waiting:  oklch(0.780 0.130 76);
+  --state-failed:   oklch(0.680 0.170 25);
+  --state-idle:     oklch(0.378 0.022 258);
+
+  --background: var(--paper);
+  --foreground: var(--ink);
+  --card: var(--surface);
+  --card-foreground: var(--ink);
+  --popover: var(--surface);
+  --popover-foreground: var(--ink);
+  --primary: oklch(0.961 0.006 247);
+  --primary-foreground: oklch(0.211 0.024 258);
+  --secondary: var(--surface-sunk);
+  --secondary-foreground: var(--ink);
+  --muted: var(--surface-sunk);
+  --muted-foreground: var(--ink-muted);
+  --accent: var(--surface-sunk);
+  --accent-foreground: var(--ink);
+  --destructive: var(--state-failed);
+  --border: var(--rule);
+  --input: var(--rule-strong);
+  --ring: var(--state-active);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-ink-faint: var(--ink-faint);
+  --color-rule: var(--rule);
+  --color-rule-strong: var(--rule-strong);
+  --color-surface: var(--surface);
+  --color-surface-sunk: var(--surface-sunk);
+
+  --color-state-done: var(--state-done);
+  --color-state-active: var(--state-active);
+  --color-state-waiting: var(--state-waiting);
+  --color-state-failed: var(--state-failed);
+  --color-state-idle: var(--state-idle);
+
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 2px);
+
+  --font-sans: var(--font-instrument), ui-sans-serif, system-ui, -apple-system,
+               "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+@layer base {
+  * { @apply border-border outline-ring/50; }
+
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "cv05" 1, "ss01" 1;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /*
+   * Dates and money are compared down a column constantly in this product, so
+   * figures are tabular everywhere by default. Proportional numerals make a
+   * budget column impossible to scan.
+   */
+  :where(time, [data-numeric], .tnum, input[type="number"]) {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+  }
+
+  h1, h2, h3 { text-wrap: balance; letter-spacing: -0.015em; }
+  p { text-wrap: pretty; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * The date rail: the anchor device of the whole product. A moment is a DATE
+ * first and a person second, so the numeral leads and everything else hangs
+ * off it.
+ * ------------------------------------------------------------------------ */
+.date-mark {
+  font-variant-numeric: tabular-nums;
+  line-height: 0.85;
+  letter-spacing: -0.04em;
+}

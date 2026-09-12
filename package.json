@@ -3,7 +3,9 @@
   "private": true,
   "version": "0.1.0",
   "packageManager": "pnpm@10.30.3",
-  "engines": { "node": ">=20.9.0" },
+  "engines": {
+    "node": ">=20.9.0"
+  },
   "scripts": {
     "dev": "turbo run dev --filter=web",
     "build": "turbo run build",
@@ -11,7 +13,11 @@
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "db:migrate": "./scripts/migrate.sh",
-    "db:smoke": "./scripts/smoke.sh"
+    "db:smoke": "./scripts/smoke.sh",
+    "db:types": "node scripts/gen-db-types.mjs",
+    "dev:all": "turbo run dev",
+    "dev:worker": "turbo run dev --filter=@moments/worker",
+    "start": "node server.js"
   },
   "devDependencies": {
     "turbo": "^2.5.8",
