@@ -2,6 +2,7 @@ import { randomBytes, createHash } from "node:crypto";
 import { PermanentTaskError } from "@moments/contracts";
 import type { TaskHandler } from "../poller/types.js";
 import { send } from "./channel.js";
+import { config } from "../config.js";
 
 /**
  * T-7: ask the employee to confirm where the gift should go.
@@ -71,7 +72,7 @@ export const verifyDetailsSend: TaskHandler = {
       body:
         `Hi ${name},\n\n` +
         `We've got something coming your way. Confirm where to send it:\n` +
-        `${process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"}/c/${token}\n\n` +
+        `${config.appUrl}/c/${token}\n\n` +
         `Takes about thirty seconds. You can change it any time before the day.`,
       idempotencyKey: ctx.idempotencyKey("email:verify"),
     });

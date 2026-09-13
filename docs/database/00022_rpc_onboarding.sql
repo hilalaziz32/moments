@@ -203,16 +203,18 @@ BEGIN
   END LOOP;
 
   -- Second pass: link managers now that every row exists.
+  -- The alias is `ir`, NOT `r`: `r` is this function's loop variable, and reusing
+  -- it as a table alias makes every r.column reference ambiguous at run time.
   UPDATE moments.employees e
      SET manager_id = mgr.id
-    FROM moments.employee_import_rows r
+    FROM moments.employee_import_rows ir
     JOIN moments.employees mgr
       ON mgr.org_id = v_org
-     AND mgr.work_email = r.normalized ->> 'managerEmail'
+     AND mgr.work_email = ir.normalized ->> 'managerEmail'
      AND mgr.deleted_at IS NULL
-   WHERE r.batch_id = p_batch_id
-     AND r.employee_id = e.id
-     AND NULLIF(r.normalized ->> 'managerEmail', '') IS NOT NULL
+   WHERE ir.batch_id = p_batch_id
+     AND ir.employee_id = e.id
+     AND NULLIF(ir.normalized ->> 'managerEmail', '') IS NOT NULL
      AND e.manager_id IS DISTINCT FROM mgr.id
      AND mgr.id <> e.id;
 

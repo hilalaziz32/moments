@@ -18,6 +18,8 @@ export const config = Object.freeze({
     serviceRoleKey: req("SUPABASE_SERVICE_ROLE_KEY"),
   }),
   internalApiKey: opt("INTERNAL_API_KEY"),
+  /** Base for links in emails. */
+  appUrl: opt("NEXT_PUBLIC_APP_URL", "http://localhost:3000"),
   /** Detector horizon. Long enough that T-7 always exists comfortably. */
   horizonDays: Number(opt("DETECTOR_HORIZON_DAYS", "45")),
 });

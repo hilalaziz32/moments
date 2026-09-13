@@ -193,4 +193,28 @@ BEGIN
   END;
 END $$;
 
+-- ================================================================ TEST 10
+\echo ''
+\echo '== TEST 10: fail_task requeues a retryable error and dead-letters a permanent one =='
+UPDATE moments.moment_tasks
+   SET status = 'pending', attempts = 0, locked_by = NULL, locked_at = NULL, lease_expires_at = NULL,
+       next_attempt_at = now() - interval '1 minute'
+ WHERE task_type = 'select_gift';
+SELECT count(*) AS claimed FROM moments.claim_due_tasks('default', 1, 60, 'worker-f');
+SELECT moments.fail_task((SELECT id FROM moments.moment_tasks WHERE task_type = 'select_gift'),
+                         'worker-f', 'retryable', 'vendor timeout', now() + interval '1 minute') AS recorded;
+SELECT status::text AS after_retryable,
+       CASE WHEN status = 'pending' THEN 'PASS - back in the queue' ELSE 'FAIL' END AS verdict
+  FROM moments.moment_tasks WHERE task_type = 'select_gift';
+
+UPDATE moments.moment_tasks SET next_attempt_at = now() - interval '1 minute' WHERE task_type = 'select_gift';
+SELECT count(*) AS claimed_again FROM moments.claim_due_tasks('default', 1, 60, 'worker-f');
+SELECT moments.fail_task((SELECT id FROM moments.moment_tasks WHERE task_type = 'select_gift'),
+                         'worker-f', 'permanent', 'employee has no email') AS recorded;
+SELECT status::text AS after_permanent,
+       (SELECT count(*) FROM moments.dead_letters) AS dead_letters,
+       CASE WHEN status = 'dead' AND (SELECT count(*) FROM moments.dead_letters) = 1
+            THEN 'PASS - dead-lettered, no retry' ELSE 'FAIL' END AS verdict
+  FROM moments.moment_tasks WHERE task_type = 'select_gift';
+
 ROLLBACK;

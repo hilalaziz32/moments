@@ -29,6 +29,8 @@ export interface SendRequest {
   subject?: string | null;
   body: string;
   idempotencyKey: string;
+  /** The body carries a secret (e.g. a one-time code) and must never be stored. */
+  sensitive?: boolean;
 }
 
 export async function send(ctx: TaskContext, req: SendRequest): Promise<"sent" | "already_sent"> {
@@ -50,7 +52,7 @@ export async function send(ctx: TaskContext, req: SendRequest): Promise<"sent" |
     idempotency_key: req.idempotencyKey,
     recipient_ref: req.recipientRef,
     rendered_subject: req.subject ?? null,
-    rendered_body: isPreview ? `[PREVIEW] ${req.body}` : req.body,
+    rendered_body: storedBody(req, isPreview),
     status: "sending",
     is_preview: isPreview,
   } as never);
@@ -78,4 +80,20 @@ export async function send(ctx: TaskContext, req: SendRequest): Promise<"sent" |
     .eq("idempotency_key", req.idempotencyKey);
 
   return "sent";
+}
+
+/**
+ * What we keep of a message body.
+ *
+ * outbound_messages is readable by every member of the org -- that is how HR sees
+ * what went out. So tokenised links and one-time codes must never land in it: a
+ * colleague with viewer access could otherwise open someone's address form, or
+ * approve a gift, straight from the message log.
+ */
+const TOKEN_LINK = /\/(a|c|f|i)\/mt1_[A-Za-z0-9_-]{43}/g;
+
+function storedBody(req: SendRequest, isPreview: boolean): string {
+  if (req.sensitive) return "[contains a one-time code, not stored]";
+  const body = req.body.replace(TOKEN_LINK, "/$1/[private link]");
+  return isPreview ? `[PREVIEW] ${body}` : body;
 }

@@ -75,3 +75,8 @@ services from one image via `PROCESS_ROLE`.
 3. **Scheduling bugs are silent.** All scheduling math must be pure, injected-clock,
    and fixture-tested. Database constraints are the last line: a logic bug should
    produce a loud conflict, not a quiet duplicate.
+
+## Git identity
+
+Every commit is authored as **Muhammad Hilal Aziz <janjeejan740@gmail.com>** (pinned in this repo's local git config).
+Never use team@scaletopia-agency.com for anything in this project. Never override the author with `-c user.email`.

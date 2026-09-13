@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { requireUser } from "@/lib/auth/guard";
-import { requireOrg, ACTIVE_ORG_COOKIE } from "@/lib/auth/org";
+import { requireOrg, isOrgAdmin, ACTIVE_ORG_COOKIE } from "@/lib/auth/org";
 import { employeeImportRowSchema } from "@moments/contracts";
 
 /**
@@ -153,55 +153,69 @@ export async function saveBudgets(
   formData: FormData,
 ): Promise<ActionResult> {
   const org = await requireOrg();
+  const mode = formData.get("mode") === "settings" ? "settings" : "onboarding";
+
+  // RLS only lets owners and admins write budgets, and a blocked UPDATE is not
+  // an error -- it just changes nothing. Say so instead of pretending it saved.
+  if (!isOrgAdmin(org.role)) {
+    return { error: "Only an owner or admin can change budgets." };
+  }
+
   const supabase = await createClient();
 
-  const updates: { id: string; is_enabled: boolean; budget_paisa: number; approval_required: boolean }[] = [];
+  type PolicyUpdate = { is_enabled: boolean; approval_required: boolean; budget_paisa?: number };
+  const updates: { id: string; patch: PolicyUpdate }[] = [];
   const fieldErrors: Record<string, string> = {};
 
-  for (const [key, value] of formData.entries()) {
-    const m = /^budget:(.+)$/.exec(key);
-    if (!m) continue;
-    const policyId = m[1]!;
-    const rupees = Number(String(value).replace(/[^\d.]/g, ""));
+  // Keyed off the hidden `policy` field, not `budget:<id>`: a switched-off
+  // moment's budget box is disabled, and disabled inputs are not submitted.
+  for (const raw of new Set(formData.getAll("policy").map(String))) {
+    const policyId = raw;
     const enabled = formData.get(`enabled:${policyId}`) === "on";
     const approval = formData.get(`approval:${policyId}`) === "on";
+    const budgetField = formData.get(`budget:${policyId}`);
 
-    if (enabled) {
-      if (!Number.isFinite(rupees) || rupees < 100) {
-        fieldErrors[`budget:${policyId}`] = "Set at least PKR 100, or turn this moment off.";
-        continue;
-      }
-      if (rupees > 1_000_000) {
-        fieldErrors[`budget:${policyId}`] = "That is above the PKR 1,000,000 limit.";
-        continue;
-      }
+    if (!enabled) {
+      // Keep the stored budget so switching a moment back on restores it.
+      updates.push({ id: policyId, patch: { is_enabled: false, approval_required: approval } });
+      continue;
+    }
+
+    const rupees = Number(String(budgetField ?? "").replace(/[^\d.]/g, ""));
+    if (budgetField === null || !Number.isFinite(rupees) || rupees < 100) {
+      fieldErrors[`budget:${policyId}`] = "Set at least PKR 100, or turn this moment off.";
+      continue;
+    }
+    if (rupees > 1_000_000) {
+      fieldErrors[`budget:${policyId}`] = "That is above the PKR 1,000,000 limit.";
+      continue;
     }
     updates.push({
       id: policyId,
-      is_enabled: enabled,
-      budget_paisa: enabled ? Math.round(rupees * 100) : 0,
-      approval_required: approval,
+      patch: { is_enabled: true, approval_required: approval, budget_paisa: Math.round(rupees * 100) },
     });
   }
 
   if (Object.keys(fieldErrors).length) {
-    return { error: "Check the budgets below.", fieldErrors };
+    return { error: "Check the budgets highlighted on the left.", fieldErrors };
   }
 
   for (const u of updates) {
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("moment_policies")
-      .update({
-        is_enabled: u.is_enabled,
-        budget_paisa: u.budget_paisa,
-        approval_required: u.approval_required,
-      })
+      .update(u.patch)
       .eq("id", u.id)
-      .eq("org_id", org.orgId);
+      .eq("org_id", org.orgId)
+      .select("id");
     if (error) return { error: error.message };
+    if (!data || data.length === 0) {
+      return { error: "Some budgets could not be saved. Refresh the page and try again." };
+    }
   }
 
   revalidatePath("/setup/budgets");
+  revalidatePath("/settings/moments");
+  if (mode === "settings") return { success: true };
   redirect("/setup/review");
 }
 

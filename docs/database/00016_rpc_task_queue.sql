@@ -107,7 +107,7 @@ BEGIN
                OR (p_next_attempt_at IS NULL);
 
   UPDATE moments.moment_tasks
-     SET status          = CASE WHEN v_is_dead THEN 'dead' ELSE 'pending' END,
+     SET status          = (CASE WHEN v_is_dead THEN 'dead' ELSE 'pending' END)::moments.task_status,
          next_attempt_at = CASE WHEN v_is_dead THEN next_attempt_at
                                 ELSE p_next_attempt_at END,
          last_error      = p_error,

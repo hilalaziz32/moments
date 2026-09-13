@@ -4,6 +4,7 @@ import { requireInternalKey } from "./middleware/internal-api-key.js";
 import { runDetector } from "./cron/detector.js";
 import { runAnnouncementWatchdog } from "./cron/watchdog.js";
 import { db } from "./lib/supabase.js";
+import { runMonthlyBilling } from "./cron/billing.js";
 
 /**
  * The worker's tiny HTTP surface.
@@ -46,6 +47,14 @@ export function createApiApp(): Express {
   app.post("/internal-api/watchdog/run", requireInternalKey, async (_req, res) => {
     await runAnnouncementWatchdog();
     res.json({ ok: true });
+  });
+
+  app.post("/internal-api/billing/run", requireInternalKey, async (_req, res) => {
+    try {
+      res.json({ ok: true, ...(await runMonthlyBilling()) });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: String(err) });
+    }
   });
 
   return app;

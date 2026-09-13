@@ -7,6 +7,9 @@ import { config } from "../config.js";
 import { nextAttemptAt } from "./backoff.js";
 import type { ClaimedTaskRow, TaskHandler, TaskLane } from "./types.js";
 import { HANDLERS } from "../handlers/index.js";
+import { raiseAlert } from "../lib/alerts.js";
+
+export { raiseAlert };
 
 /**
  * Runs claimed tasks.
@@ -49,24 +52,6 @@ function recordFailure(taskType: string): void {
   }
 }
 
-export async function raiseAlert(
-  severity: "p1" | "p2" | "p3",
-  dedupeKey: string,
-  title: string,
-  body: string,
-  orgId?: string,
-): Promise<void> {
-  // alerts has a partial unique index on dedupe_key WHERE status='open', so a
-  // flapping condition creates one alert rather than four hundred.
-  const { error } = await db.from("alerts").insert({
-    severity, kind: dedupeKey.split(":")[0] ?? "worker", dedupe_key: dedupeKey,
-    title, body, org_id: orgId ?? null,
-  } as never);
-  if (error && !error.message.includes("duplicate key")) {
-    logger.error({ err: error.message }, "could not record alert");
-  }
-}
-
 export async function dispatchBatch(tasks: ClaimedTaskRow[], concurrency: number): Promise<void> {
   const limit = pLimit(concurrency);
   await Promise.all(tasks.map((t) => limit(() => runOne(t))));
@@ -89,6 +74,18 @@ async function runOne(task: ClaimedTaskRow): Promise<void> {
     // Put it straight back rather than burning the attempt on a known outage.
     await failTask(task, "retryable", "circuit breaker open", log,
       new Date(Date.now() + 60_000).toISOString());
+    return;
+  }
+
+  // A cancelled or skipped moment runs nothing further. The cancellation trigger
+  // already cancels pending tasks; this catches any claimed in the instant between.
+  const { data: parent } = await db
+    .from("moment_events").select("status").eq("id", task.moment_event_id).maybeSingle();
+  if (parent && (parent.status === "cancelled" || parent.status === "skipped")) {
+    await db.rpc("skip_task", {
+      p_task_id: task.id, p_worker_id: config.workerId, p_reason: `moment_${parent.status}`,
+    } as never);
+    log.info({ status: parent.status }, "moment no longer active; task skipped");
     return;
   }
 

@@ -4,34 +4,26 @@ import { logger } from "../lib/logger.js";
 import { runDetector } from "./detector.js";
 import { runReaper } from "./reaper.js";
 import { runAnnouncementWatchdog, runLatenessSweep } from "./watchdog.js";
+import { runApprovalSweep } from "./approvals.js";
+import { runMonthlyBilling } from "./billing.js";
 
 /**
- * All schedules pass { timezone } explicitly. The container runs TZ=UTC on
- * purpose -- relying on ambient timezone is how a deploy to a differently
+ * Every schedule passes { timezone } explicitly. The container runs TZ=UTC on
+ * purpose -- relying on the ambient timezone is how a deploy to a differently
  * configured host silently moves everyone's 9 AM.
  */
 export function startCrons(): void {
   const timezone = config.timezone;
+  const guard = (name: string, fn: () => Promise<unknown>) => () => {
+    void fn().catch((e) => logger.error({ err: String(e) }, `${name} threw`));
+  };
 
-  // 00:15 local: materialise the next 45 days.
-  cron.schedule("15 0 * * *", () => {
-    void runDetector().catch((e) => logger.error({ err: String(e) }, "detector cron threw"));
-  }, { timezone });
-
-  // 09:10 local: did every announcement actually go out?
-  cron.schedule("10 9 * * *", () => {
-    void runAnnouncementWatchdog().catch((e) => logger.error({ err: String(e) }, "watchdog threw"));
-  }, { timezone });
-
-  // Every minute: recover tasks from dead workers.
-  cron.schedule("* * * * *", () => {
-    void runReaper().catch((e) => logger.error({ err: String(e) }, "reaper threw"));
-  }, { timezone });
-
-  // Every five minutes: anything running late anywhere.
-  cron.schedule("*/5 * * * *", () => {
-    void runLatenessSweep().catch((e) => logger.error({ err: String(e) }, "lateness sweep threw"));
-  }, { timezone });
+  cron.schedule("15 0 * * *",   guard("detector", () => runDetector()), { timezone });           // 00:15 materialise 45 days
+  cron.schedule("10 9 * * *",   guard("watchdog", runAnnouncementWatchdog), { timezone });       // 09:10 did 9 AM happen?
+  cron.schedule("* * * * *",    guard("reaper", () => runReaper()), { timezone });               // recover dead workers
+  cron.schedule("*/5 * * * *",  guard("lateness", runLatenessSweep), { timezone });              // anything running late
+  cron.schedule("*/15 * * * *", guard("approvals", runApprovalSweep), { timezone });             // auto-approve deadlines
+  cron.schedule("0 2 1 * *",    guard("billing", () => runMonthlyBilling()), { timezone });      // invoice last month
 
   logger.info({ timezone }, "crons started");
 }
