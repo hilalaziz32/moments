@@ -7,6 +7,7 @@ import { requireUser } from "@/lib/auth/guard";
 import { isOrgAdmin, requireOrg } from "@/lib/auth/org";
 import { canSend, resolveTwilioCredentials, sendSms } from "@/lib/twilio";
 import type { ActionResult } from "@/app/actions/onboarding";
+import { logActivity } from "@/lib/activity";
 
 /**
  * SMS settings live in org_integrations (provider `twilio`). Tenants may update
@@ -53,6 +54,7 @@ export async function saveSmsSettings(_prev: unknown, fd: FormData): Promise<Act
     : await admin.from("org_integrations").insert({ org_id: org.orgId, provider: "twilio", installed_by: user.id, ...patch });
   if (error) return { error: explain(error.message) };
 
+  await logActivity(org.orgId, "sms.settings_saved", "org_integrations", null, { enabled });
   revalidatePath("/settings/messages");
   return { success: true };
 }

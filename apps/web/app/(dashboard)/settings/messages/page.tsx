@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { canSend, resolveTwilioCredentials } from "@/lib/twilio";
 import { formatDateTime, AUDIENCE_LABEL } from "@/lib/format";
 import { SmsSettingsForm, TestTextForm } from "@/components/settings/sms-settings-form";
+import { renderManagerNote, smsText } from "@moments/core/messages";
 
 export const metadata: Metadata = { title: "Messages" };
 
@@ -81,6 +82,26 @@ export default async function MessagesSettingsPage() {
             <TestTextForm defaultPhone={testPhone} />
           </div>
         )}
+      </section>
+
+      <section>
+        <h2 className="text-sm font-semibold text-ink">What people receive</h2>
+        <p className="mt-1 text-sm text-ink-muted">For a birthday, word for word. Other moments use the same shape.</p>
+        <ul className="mt-3 space-y-3">
+          {[
+            { who: "The employee, about a week before", text: smsText.addressRequest("Bilal", org.orgName, "moments.pk/c/…") },
+            { who: "Reminder, if they haven't answered", text: smsText.addressReminder("Bilal", "moments.pk/c/…") },
+            { who: "Their manager, on the day", text: smsText.managerNote("Bilal", renderManagerNote("birthday", "Bilal", null)) },
+            { who: "You, if approval is on", text: smsText.approvalRequest("PKR 2,500", "Bilal", "Birthday", "moments.pk/a/…") },
+            { who: "You, Monday mornings", text: smsText.weeklySummary(org.orgName, ["Bilal's birthday Tue", "Sara's 5-year anniversary Thu"], 1, "moments.pk") },
+            { who: "You, on the 1st of each month", text: smsText.monthlyNews(org.orgName, "moments.pk/employees") },
+          ].map((m) => (
+            <li key={m.who} className="rounded-lg border border-rule bg-card px-4 py-3">
+              <p className="text-xs text-ink-muted">{m.who}</p>
+              <p className="mt-1 text-sm text-ink">{m.text}</p>
+            </li>
+          ))}
+        </ul>
       </section>
 
       <section>

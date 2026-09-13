@@ -1,6 +1,7 @@
 import type { TaskHandler } from "../poller/types.js";
 import { config } from "../config.js";
 import { send } from "./channel.js";
+import { smsText } from "@moments/core/messages";
 import { smsNumber, smsSettings } from "./sms.js";
 import { mintToken } from "./tokens.js";
 
@@ -77,7 +78,7 @@ export const verifyDetailsRemind: TaskHandler = {
         channel: "sms",
         audience: "address_verification",
         recipientRef: phone,
-        body: `Hi ${first}, we still need your delivery address for something your team planned. 30 seconds: ${url}`,
+        body: smsText.addressReminder(first, url),
         idempotencyKey: ctx.idempotencyKey("sms:verify-remind"),
       });
     }

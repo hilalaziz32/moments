@@ -12,6 +12,7 @@ export default async function SettingsLayout({ children }: { children: React.Rea
           { href: "/settings/team", label: "Team members" },
           { href: "/settings/moments", label: "Budgets" },
           { href: "/settings/messages", label: "Messages" },
+          { href: "/settings/activity", label: "Activity" },
         ]
       : []),
     { href: "/settings/profile", label: "Your profile" },

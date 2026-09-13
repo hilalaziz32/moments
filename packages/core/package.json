@@ -9,7 +9,8 @@
     ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" },
     "./schedule": { "types": "./dist/schedule/index.d.ts", "default": "./dist/schedule/index.js" },
     "./csv": { "types": "./dist/csv/index.d.ts", "default": "./dist/csv/index.js" },
-    "./money": { "types": "./dist/money/index.d.ts", "default": "./dist/money/index.js" }
+    "./money": { "types": "./dist/money/index.d.ts", "default": "./dist/money/index.js" },
+    "./messages": { "types": "./dist/messages/index.d.ts", "default": "./dist/messages/index.js" }
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

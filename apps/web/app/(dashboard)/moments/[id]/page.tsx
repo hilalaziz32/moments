@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { formatPKR } from "@moments/core/money";
+import { renderAnnouncement, renderManagerNote, smsText } from "@moments/core/messages";
 import { requireOrg, canManagePeople } from "@/lib/auth/org";
 import { createClient } from "@/lib/supabase/server";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -38,7 +39,7 @@ export default async function MomentPage({ params }: { params: Promise<{ id: str
 
   const { data: event } = await supabase
     .from("moment_events")
-    .select("id, occurs_on, status, budget_paisa, milestone_years, occurrence_note, is_provisional, cancel_reason, metadata, employees(full_name, preferred_name, department, job_title), moment_types(label)")
+    .select("id, occurs_on, status, budget_paisa, milestone_years, occurrence_note, is_provisional, cancel_reason, metadata, employees(full_name, preferred_name, department, job_title), moment_types(key, label)")
     .eq("id", id)
     .eq("org_id", org.orgId)
     .maybeSingle();
@@ -75,7 +76,10 @@ export default async function MomentPage({ params }: { params: Promise<{ id: str
   const emp = event.employees as unknown as {
     full_name: string; preferred_name: string | null; department: string | null; job_title: string | null;
   } | null;
-  const label = (event.moment_types as unknown as { label: string } | null)?.label ?? "Moment";
+  const mt = event.moment_types as unknown as { key: string; label: string } | null;
+  const label = mt?.label ?? "Moment";
+  const momentKey = mt?.key ?? "";
+  const firstName = emp?.preferred_name || emp?.full_name?.split(" ")[0] || "there";
   const title = event.milestone_years ? `${event.milestone_years} year anniversary` : label;
   const name = emp?.preferred_name || emp?.full_name || org.orgName;
   const tasks = tasksRes.data ?? [];
@@ -252,8 +256,46 @@ export default async function MomentPage({ params }: { params: Promise<{ id: str
         </div>
       </div>
 
+      {emp && (
+        <Card>
+          <CardHeader><CardTitle>What people will receive</CardTitle></CardHeader>
+          <CardContent>
+            <ul className="space-y-4">
+              {[
+                {
+                  who: `Text to ${firstName}`,
+                  when: dayOf("verify_details_send") ? `Around ${dayOf("verify_details_send")}` : "About a week before",
+                  text: smsText.addressRequest(firstName, org.orgName, "moments.pk/c/…"),
+                },
+                {
+                  who: "Text to their manager",
+                  when: "On the day",
+                  text: smsText.managerNote(firstName, renderManagerNote(momentKey, firstName, event.milestone_years)),
+                },
+                {
+                  who: "Company announcement",
+                  when: "On the day",
+                  text: renderAnnouncement(momentKey, name, event.milestone_years, emp.department),
+                },
+              ].map((p) => (
+                <li key={p.who}>
+                  <p className="flex flex-wrap items-baseline justify-between gap-x-4 text-sm">
+                    <span className="font-medium text-ink">{p.who}</span>
+                    <span className="text-xs text-ink-faint">{p.when}</span>
+                  </p>
+                  <p className="mt-1 rounded-lg bg-surface-sunk px-3 py-2 text-sm text-ink">{p.text}</p>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-4 text-xs text-ink-faint">
+              Word for word what we send. Company announcements go to Slack or email once connected, never by SMS.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
-        <CardHeader><CardTitle>Messages</CardTitle></CardHeader>
+        <CardHeader><CardTitle>Messages sent</CardTitle></CardHeader>
         <CardContent>
           {messages.length === 0 ? (
             <p className="text-sm text-ink-muted">Nothing has been sent for this moment yet.</p>

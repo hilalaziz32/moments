@@ -2,6 +2,7 @@ import { randomBytes, createHash } from "node:crypto";
 import { PermanentTaskError } from "@moments/contracts";
 import type { TaskHandler } from "../poller/types.js";
 import { send } from "./channel.js";
+import { smsText } from "@moments/core/messages";
 import { smsNumber, smsSettings } from "./sms.js";
 import { config } from "../config.js";
 
@@ -103,7 +104,7 @@ export const verifyDetailsSend: TaskHandler = {
         channel: "sms",
         audience: "address_verification",
         recipientRef: phone,
-        body: `Hi ${name}, ${orgName} has something on the way for you. Confirm your delivery address: ${url}`,
+        body: smsText.addressRequest(name, orgName, url),
         idempotencyKey: ctx.idempotencyKey("sms:verify"),
       });
       if (result === "sent" || result === "already_sent") sentVia.push("sms");

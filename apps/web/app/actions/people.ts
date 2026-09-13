@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireUser } from "@/lib/auth/guard";
 import { canManagePeople, requireOrg } from "@/lib/auth/org";
 import { planOrgNow } from "@/lib/planning";
+import { logActivity } from "@/lib/activity";
 import type { ActionResult } from "@/app/actions/onboarding";
 
 /**
@@ -96,6 +97,8 @@ export async function shareNews(_prev: unknown, fd: FormData): Promise<ActionRes
   });
   if (error) return { error: "Couldn't save that. Try again." };
 
+  await logActivity(org.orgId, "news.shared", "employees", employeeId, { label, date: eventDate });
+
   if (kind === "promotion" && newTitle) {
     await supabase.from("employees").update({ job_title: newTitle }).eq("id", employeeId).eq("org_id", org.orgId);
   }
@@ -131,6 +134,7 @@ export async function withdrawNews(fd: FormData): Promise<void> {
     .eq("occurrence_key", `evt:${eventId}`)
     .not("status", "in", UNFINISHED);
 
+  await logActivity(org.orgId, "news.withdrawn", "employees", employeeId);
   await afterChange(org.orgId, employeeId);
 }
 
@@ -180,6 +184,7 @@ export async function setLeaving(_prev: unknown, fd: FormData): Promise<ActionRe
     .not("status", "in", UNFINISHED);
   if (reason !== "terminated_for_cause") stale = stale.neq("occurrence_key", `exit:${lastDay}`);
   await stale;
+  await logActivity(org.orgId, "leaving.set", "employees", employeeId, { lastDay, reason });
 
   await afterChange(org.orgId, employeeId);
 
@@ -199,6 +204,7 @@ export async function clearLeaving(fd: FormData): Promise<void> {
     .update({ exit_date: null, exit_reason: null, status: "active" })
     .eq("id", employeeId)
     .eq("org_id", org.orgId);
+  await logActivity(org.orgId, "leaving.cleared", "employees", employeeId);
   await supabase
     .from("moment_events")
     .update({ status: "cancelled", cancelled_at: new Date().toISOString(), cancel_reason: "No longer leaving" })
@@ -316,6 +322,7 @@ export async function updatePerson(_prev: unknown, fd: FormData): Promise<Action
   }
 
   await afterChange(org.orgId, employeeId);
+  await logActivity(org.orgId, "person.updated", "employees", employeeId);
   return { success: true, note: "Saved." };
 }
 
@@ -334,6 +341,7 @@ export async function removePerson(fd: FormData): Promise<void> {
   await supabase.from("moment_events")
     .update({ status: "cancelled", cancelled_at: new Date().toISOString(), cancel_reason: "Removed from the team" })
     .eq("org_id", org.orgId).eq("employee_id", employeeId).not("status", "in", UNFINISHED);
+  await logActivity(org.orgId, "person.removed", "employees", employeeId);
 
   revalidatePath("/employees");
   revalidatePath("/moments");
@@ -402,6 +410,7 @@ export async function addPerson(_prev: unknown, fd: FormData): Promise<ActionRes
     return { error: "Couldn't add them. Try again." };
   }
 
+  await logActivity(org.orgId, "person.added", "employees", data.id, { name: fullName });
   await afterChange(org.orgId, data.id);
   redirect(`/employees/${data.id}`);
 }

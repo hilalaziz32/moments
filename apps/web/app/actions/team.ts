@@ -11,6 +11,7 @@ import { mintToken } from "@/lib/tokens";
 import { resolveInvite } from "@/lib/invitations";
 import { appOrigin } from "@/lib/origin";
 import type { ActionResult } from "@/app/actions/onboarding";
+import { logActivity } from "@/lib/activity";
 
 /**
  * Team members and invitations.
@@ -141,6 +142,7 @@ export async function changeRole(_prev: unknown, fd: FormData): Promise<ActionRe
 
   const { error } = await g.supabase.from("org_members").update({ role }).eq("id", g.member.id).eq("org_id", g.org.orgId);
   if (error) return { error: "Couldn't change their role. Try again." };
+  await logActivity(g.org.orgId, "member.role_changed", "org_members", g.member.id, { role });
 
   revalidatePath("/settings/team");
   return { success: true };
@@ -150,6 +152,7 @@ export async function removeMember(fd: FormData): Promise<void> {
   const g = await guardMemberChange(String(fd.get("memberId") ?? ""), null);
   if (!g.ok) return;
   await g.supabase.from("org_members").update({ status: "removed" }).eq("id", g.member.id).eq("org_id", g.org.orgId);
+  await logActivity(g.org.orgId, "member.removed", "org_members", g.member.id);
   revalidatePath("/settings/team");
 }
 

@@ -1,4 +1,5 @@
 import type { TaskHandler } from "../poller/types.js";
+import { renderAnnouncement, renderManagerNote, smsText } from "@moments/core/messages";
 import { send } from "./channel.js";
 import { smsNumber, smsSettings } from "./sms.js";
 
@@ -164,7 +165,7 @@ export const nudgeManager: TaskHandler = {
         channel: "sms",
         audience: "manager_nudge",
         recipientRef: managerPhone,
-        body: `${name} is being celebrated today. A line from you means a lot. Try: "${suggestion}"`,
+        body: smsText.managerNote(name ?? "", suggestion),
         idempotencyKey: ctx.idempotencyKey("manager:sms"),
       });
     }
@@ -173,50 +174,3 @@ export const nudgeManager: TaskHandler = {
   },
 };
 
-function renderAnnouncement(
-  key: string, name: string, years: number | null, department: string | null,
-): string {
-  const dept = department ? ` from ${department}` : "";
-  switch (key) {
-    case "birthday":
-      return `It's ${name}'s birthday today. Wishing you a brilliant one from all of us.`;
-    case "work_anniversary":
-      return years
-        ? `${name}${dept} is ${years} ${years === 1 ? "year" : "years"} with us today. Thank you for all of it.`
-        : `${name}${dept} marks another year with us today.`;
-    case "new_hire":
-      return `${name} joins us${dept} today. Say hello when you get a moment.`;
-    case "promotion":
-      return `${name} has been promoted. Thoroughly deserved.`;
-    case "marriage":
-      return `${name} is getting married. Every happiness to you both.`;
-    case "new_baby":
-      return `${name} has welcomed a new arrival. Congratulations to the whole family.`;
-    case "farewell":
-      return `Today is ${name}'s last day${dept}. Thank you for everything, and good luck.`;
-    case "eid_ul_fitr":
-    case "eid_ul_adha":
-      return `Eid Mubarak from all of us. Wishing you and your families a joyful one.`;
-    case "ramadan":
-      return `Ramadan Kareem. Wishing everyone a peaceful and blessed month.`;
-    default:
-      return `Celebrating ${name} today.`;
-  }
-}
-
-function renderManagerNote(key: string, name: string, years: number | null): string {
-  switch (key) {
-    case "birthday":
-      return `Happy birthday, ${name}. Hope you get a proper break today.`;
-    case "work_anniversary":
-      return `${years} years today, ${name}. Genuinely glad you're on this team.`;
-    case "new_hire":
-      return `Welcome aboard, ${name}. Shout if you need anything in these first weeks.`;
-    case "promotion":
-      return `Congratulations, ${name}. You earned this one.`;
-    case "farewell":
-      return `Thank you for everything, ${name}. Keep in touch.`;
-    default:
-      return `Thinking of you today, ${name}.`;
-  }
-}

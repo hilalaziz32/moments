@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireUser } from "@/lib/auth/guard";
 import { isOrgAdmin, requireOrg } from "@/lib/auth/org";
 import type { ActionResult } from "@/app/actions/onboarding";
+import { logActivity } from "@/lib/activity";
 
 const JURISDICTIONS = ["FBR", "SRB", "PRA", "KPRA", "BRA", "ICT"] as const;
 const LATE_POLICIES = ["fire_immediately_if_before_15", "next_day", "skip"] as const;
@@ -80,6 +81,7 @@ export async function updateCompany(_prev: unknown, fd: FormData): Promise<Actio
   if (ids.length) {
     await supabase.from("moment_policies").update({ announcement_local_time: announceAt }).in("id", ids).eq("org_id", org.orgId);
   }
+  await logActivity(org.orgId, "company.updated", "organizations", org.orgId);
 
   revalidatePath("/", "layout");
   return { success: true };

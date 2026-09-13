@@ -14,6 +14,15 @@ export interface PolicyRow {
   budgetPaisa: number;
   approvalRequired: boolean;
   upcomingCount: number;
+  /** Catalogue items suitable for this moment, most expensive first. */
+  gifts: { name: string; pricePaisa: number }[];
+}
+
+/** What the current amount buys, so a budget is a gift and not just a number. */
+function fitsLine(gifts: PolicyRow["gifts"], rupees: number): string {
+  const fits = gifts.filter((g) => g.pricePaisa <= rupees * 100).slice(0, 2);
+  if (fits.length === 0) return "Too low for anything in our catalogue yet";
+  return `e.g. ${fits.map((g) => `${g.name} (${formatPKR(g.pricePaisa)})`).join(", ")}`;
 }
 
 export function BudgetGrid({
@@ -109,6 +118,9 @@ export function BudgetGrid({
                         ? "none coming up in 90 days"
                         : `${p.upcomingCount} in the next 90 days`}
                     </span>
+                    {l.enabled && p.gifts.length > 0 && (
+                      <span className="block truncate text-xs text-ink-muted">{fitsLine(p.gifts, l.rupees)}</span>
+                    )}
                   </span>
                 </label>
 

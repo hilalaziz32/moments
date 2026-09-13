@@ -8,6 +8,7 @@ import { requireUser } from "@/lib/auth/guard";
 import { requireOrg, isOrgAdmin, ACTIVE_ORG_COOKIE } from "@/lib/auth/org";
 import { employeeImportRowSchema } from "@moments/contracts";
 import { planOrgNow } from "@/lib/planning";
+import { logActivity } from "@/lib/activity";
 
 /**
  * Server action result.
@@ -227,6 +228,8 @@ export async function saveBudgets(
       })
       .eq("id", org.orgId);
   }
+
+  await logActivity(org.orgId, "budgets.saved", "moment_policies", null);
 
   // Switching a moment on after going live should plan it straight away.
   if (org.status !== "trial") await planOrgNow(org.orgId);

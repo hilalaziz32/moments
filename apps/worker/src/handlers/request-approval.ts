@@ -7,6 +7,7 @@ import { send } from "./channel.js";
 import { mintToken, hashSecret, sixDigitCode } from "./tokens.js";
 import { approverEmails } from "./approvers.js";
 import { smsSettings } from "./sms.js";
+import { smsText } from "@moments/core/messages";
 import { formatDay } from "./format.js";
 
 /** Above this, a bare click on a forwardable link is not enough. PKR 10,000. */
@@ -162,7 +163,7 @@ export const requestApproval: TaskHandler = {
           channel: "sms",
           audience: "approval_request",
           recipientRef: a.phone,
-          body: `Approve a ${formatPKR(amount)} gift for ${name}'s ${label.toLowerCase()}? ${url}`,
+          body: smsText.approvalRequest(formatPKR(amount), name, label, url),
           idempotencyKey: ctx.idempotencyKey(`approval-sms:${tokenId}:${a.phone}`),
         });
         if (otp) {
@@ -175,7 +176,7 @@ export const requestApproval: TaskHandler = {
             channel: "sms",
             audience: "approval_request",
             recipientRef: a.phone,
-            body: `Your Moments approval code is ${otp}. Don't share it.`,
+            body: smsText.approvalCode(otp),
             idempotencyKey: ctx.idempotencyKey(`approval-code-sms:${tokenId}:${a.phone}`),
             sensitive: true,
           });

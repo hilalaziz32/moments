@@ -24,7 +24,8 @@ export type Channel = "email" | "whatsapp" | "slack" | "in_app" | "sms";
 export interface SendRequest {
   orgId: string;
   momentEventId: string | null;
-  taskId: string;
+  /** Null for sends that aren't part of a moment, e.g. the weekly HR summary. */
+  taskId: string | null;
   employeeId?: string | null;
   channel: Channel;
   audience:
