@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { webConfig } from "@/lib/config";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isValidTwilioSignature } from "@/lib/twilio";
 
@@ -14,9 +15,10 @@ export async function POST(request: NextRequest) {
   const params: Record<string, string> = {};
   for (const [k, v] of form.entries()) params[k] = String(v);
 
-  if (!isValidTwilioSignature(request.headers.get("x-twilio-signature"), params)) {
-    return new NextResponse("invalid signature", { status: 403 });
-  }
+  const signed =
+    (!params.AccountSid || params.AccountSid === webConfig.twilio.accountSid) &&
+    isValidTwilioSignature(request.headers.get("x-twilio-signature"), params);
+  if (!signed) return new NextResponse("forbidden", { status: 403 });
 
   const sid = params.MessageSid;
   const status = params.MessageStatus;
@@ -36,8 +38,7 @@ export async function POST(request: NextRequest) {
   }
 
   if (patch) {
-    const db = createAdminClient();
-    await db
+    await createAdminClient()
       .from("outbound_messages")
       .update(patch as never)
       .eq("provider_message_id", sid)

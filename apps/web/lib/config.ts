@@ -53,6 +53,13 @@ export const webConfig = Object.freeze({
     verifyToken: optionalServerEnv("WHATSAPP_VERIFY_TOKEN"),
     phoneNumberId: optionalServerEnv("WHATSAPP_PHONE_NUMBER_ID"),
   }),
+  /**
+   * The SaaS owner. Comma-separated sign-in emails allowed into /admin, which
+   * sees every account. Matched against the VERIFIED auth email only.
+   */
+  superAdminEmails: Object.freeze(
+    optionalServerEnv("SUPER_ADMIN_EMAILS").split(",").map((e) => e.trim().toLowerCase()).filter(Boolean),
+  ),
   /** SMS. The same Twilio account the worker sends from. */
   twilio: Object.freeze({
     accountSid: optionalServerEnv("TWILIO_ACCOUNT_SID"),

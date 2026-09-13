@@ -1,6 +1,7 @@
 import { PermanentTaskError, RetryableTaskError } from "@moments/contracts";
 import type { TaskContext } from "../poller/types.js";
-import { sendSms, twilioConfigured, TwilioError } from "../lib/twilio.js";
+import { sendSms, TwilioError } from "../lib/twilio.js";
+import { twilioCredentials } from "../lib/twilio-credentials.js";
 import { smsSettings } from "./sms.js";
 
 /**
@@ -93,10 +94,11 @@ export async function send(ctx: TaskContext, req: SendRequest): Promise<SendResu
  * HR sees exactly what their people will receive. No test phone, no send.
  */
 async function deliverSms(ctx: TaskContext, req: SendRequest, isPreview: boolean): Promise<SendResult> {
-  if (!twilioConfigured()) {
+  const creds = await twilioCredentials(ctx.db, req.orgId);
+  if (!creds) {
     await mark(ctx, req, { status: "suppressed", error_code: "sms_not_configured",
-      error_message: "Twilio credentials are not set on the worker." });
-    ctx.log.warn({ audience: req.audience }, "sms not delivered: Twilio is not configured");
+      error_message: "No Twilio account or sending number is set for this organisation." });
+    ctx.log.warn({ audience: req.audience }, "sms not delivered: no Twilio sender for this org");
     return "not_delivered";
   }
 
@@ -111,9 +113,9 @@ async function deliverSms(ctx: TaskContext, req: SendRequest, isPreview: boolean
   const body = isPreview ? `[PREVIEW] ${req.body}` : req.body;
 
   try {
-    const { sid } = await sendSms(to, body, { signal: ctx.signal });
+    const { sid } = await sendSms(creds, to, body, { signal: ctx.signal });
     await mark(ctx, req, { status: "sent", sent_at: new Date().toISOString(), provider_message_id: sid });
-    ctx.log.info({ audience: req.audience, isPreview }, "sms sent");
+    ctx.log.info({ audience: req.audience, isPreview, source: creds.source }, "sms sent");
     return "sent";
   } catch (err) {
     if (err instanceof TwilioError && err.retryable) {

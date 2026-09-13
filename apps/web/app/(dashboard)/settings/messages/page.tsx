@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { canManagePeople, isOrgAdmin, requireOrg } from "@/lib/auth/org";
 import { createClient } from "@/lib/supabase/server";
-import { twilioConfigured } from "@/lib/twilio";
+import { canSend, resolveTwilioCredentials } from "@/lib/twilio";
 import { formatDateTime, AUDIENCE_LABEL } from "@/lib/format";
 import { SmsSettingsForm, TestTextForm } from "@/components/settings/sms-settings-form";
 
@@ -38,7 +38,8 @@ export default async function MessagesSettingsPage() {
   const enabled = integration?.status === "connected";
   const testPhone = ((integration?.config_public ?? {}) as { testPhone?: string }).testPhone ?? null;
   const inDryRun = Boolean(orgRow?.dry_run_until && new Date(orgRow.dry_run_until) > new Date());
-  const serverReady = twilioConfigured();
+  const creds = await resolveTwilioCredentials(org.orgId);
+  const serverReady = canSend(creds);
   const missingPhones = (total ?? 0) - (withPhone ?? 0);
 
   return (
@@ -58,6 +59,11 @@ export default async function MessagesSettingsPage() {
 
       <section className="rounded-lg border border-rule bg-card p-5">
         <h2 className="text-sm font-semibold text-ink">SMS</h2>
+        {serverReady && (creds.fromNumber || creds.messagingServiceSid) && (
+          <p className="mt-1 text-xs text-ink-faint">
+            Sent from {creds.fromNumber ?? "your company's messaging service"}
+          </p>
+        )}
         <p className="mt-1 text-sm text-ink-muted">
           {inDryRun
             ? testPhone

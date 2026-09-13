@@ -5,11 +5,21 @@ import { Button } from "@/components/ui/button";
 import { DateMark } from "@/components/moments/date-mark";
 import { Pipeline } from "@/components/moments/pipeline";
 
-export default async function Home() {
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: Promise<{ code?: string }>;
+}) {
+  // A confirmation email lands here with ?code= when Supabase falls back to its
+  // Site URL instead of our /auth/callback. Finish the sign-in rather than
+  // dropping the person on the marketing page, still signed out.
+  const { code } = await searchParams;
+  if (code) redirect(`/auth/callback?code=${encodeURIComponent(code)}&next=/setup`);
+
   // The landing page must render even if auth is unreachable or unconfigured:
   // it is the one page that explains what Moments is.
   const user = await getCurrentUser().catch(() => null);
-  if (user) redirect("/dashboard");
+  if (user) redirect(user.isSuperAdmin ? "/admin" : "/dashboard");
 
   return (
     <main className="mx-auto flex min-h-dvh max-w-5xl flex-col px-6">

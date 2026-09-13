@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { webConfig } from "@/lib/config";
+import { isSuperAdminUser } from "@/lib/auth/super-admin";
 
 export type ActionResult =
   | { success: true }
@@ -22,7 +23,7 @@ export async function login(_prev: unknown, formData: FormData): Promise<ActionR
   }
 
   const supabase = await createClient();
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
   if (error) {
     // Deliberately does not distinguish "no such account" from "wrong password":
@@ -31,7 +32,7 @@ export async function login(_prev: unknown, formData: FormData): Promise<ActionR
   }
 
   revalidatePath("/", "layout");
-  redirect("/dashboard");
+  redirect(isSuperAdminUser(data.user) ? "/admin" : "/dashboard");
 }
 
 export async function signup(_prev: unknown, formData: FormData): Promise<ActionResult> {

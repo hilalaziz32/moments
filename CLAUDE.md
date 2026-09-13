@@ -32,6 +32,11 @@ Market: Pakistan. Incumbent corporate gifting suppliers sell merchandise in bulk
   reach a person: address links and reminders, manager notes, approval requests. Never
   company-wide announcements. **Email (SMTP/Resend) is on hold** until there are paying
   customers; email sends are still recorded in `outbound_messages`, just not delivered.
+- **Super admin (`/admin`) is the SaaS owner only**: sign-in emails in `SUPER_ADMIN_EMAILS`,
+  matched against the verified auth email (never `profiles.email`, which users can edit).
+  It sees every account and assigns each one's Twilio sending number. Twilio SID/token
+  live only in env; the per-org number is `org_integrations.external_account_id`
+  (provider `twilio`), a column tenants cannot update.
 - Where each moment's data comes from, and the HR/manager/employee journeys:
   `docs/CUSTOMER_JOURNEY.md`.
 - **v1 fulfillment is ops-assisted**: real order records plus an internal ops queue

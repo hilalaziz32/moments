@@ -22,6 +22,7 @@ export function AppShell({
     { href: "/settings/messages", label: "Messages", show: canManagePeople(org.role) },
     { href: "/billing", label: "Billing", show: canManageBilling(org.role) },
     { href: "/ops", label: "Ops", show: user.isPlatformStaff },
+    { href: "/admin", label: "Admin", show: user.isSuperAdmin },
   ].filter((n) => n.show);
 
   const initials = (user.fullName || user.email || "?")

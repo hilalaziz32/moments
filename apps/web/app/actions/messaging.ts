@@ -5,7 +5,7 @@ import { normalizePhone } from "@moments/core/csv";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireUser } from "@/lib/auth/guard";
 import { isOrgAdmin, requireOrg } from "@/lib/auth/org";
-import { sendTestSms, twilioConfigured } from "@/lib/twilio";
+import { canSend, resolveTwilioCredentials, sendSms } from "@/lib/twilio";
 import type { ActionResult } from "@/app/actions/onboarding";
 
 /**
@@ -61,8 +61,9 @@ export async function sendTestText(_prev: unknown, fd: FormData): Promise<Action
   const org = await requireOrg();
   // Every text costs money, so only people who can change settings can send one.
   if (!isOrgAdmin(org.role)) return { error: "Only an owner or admin can send a test text." };
-  if (!twilioConfigured()) {
-    return { error: "Twilio isn't connected on the server yet. Add the TWILIO_ settings, then try again." };
+  const creds = await resolveTwilioCredentials(org.orgId);
+  if (!canSend(creds)) {
+    return { error: "No sending number is set up for your company yet. Our team will connect one." };
   }
 
   const parsed = normalizePhone(String(fd.get("phone") ?? ""));
@@ -70,7 +71,7 @@ export async function sendTestText(_prev: unknown, fd: FormData): Promise<Action
     return { error: "Check the number.", fieldErrors: { phone: "Enter a mobile number like 0300 1234567." } };
   }
 
-  const result = await sendTestSms(parsed.e164, `Test from Moments: texts for ${org.orgName} are working.`);
+  const result = await sendSms(creds, parsed.e164, `Test from Moments: texts for ${org.orgName} are working.`);
   if ("error" in result) return { error: `Twilio said: ${result.error}` };
   return { success: true, note: "Sent. It should arrive within a minute." };
 }
