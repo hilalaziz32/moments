@@ -88,6 +88,11 @@ export default async function MomentsPage({
         <div className="mt-6 rounded-lg border border-dashed border-rule-strong px-6 py-12 text-center">
           <p className="text-sm font-medium text-ink">{EMPTY[filter]!.title}</p>
           <p className="mx-auto mt-1 max-w-sm text-sm text-ink-muted">{EMPTY[filter]!.body}</p>
+          {filter === "upcoming" && (
+            <Link href="/dashboard" className="mt-4 inline-block text-sm font-medium text-ink underline underline-offset-4">
+              See who&rsquo;s coming up in the next few months
+            </Link>
+          )}
         </div>
       ) : (
         <div className="mt-6 overflow-hidden rounded-lg border border-rule bg-card">

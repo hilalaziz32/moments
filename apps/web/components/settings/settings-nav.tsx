@@ -8,7 +8,7 @@ export function SettingsNav({ items }: { items: { href: string; label: string }[
   const pathname = usePathname();
 
   return (
-    <nav aria-label="Settings" className="-mx-1 flex gap-1 overflow-x-auto lg:mx-0 lg:flex-col">
+    <nav aria-label="Settings" className="flex flex-wrap gap-1 lg:flex-col lg:flex-nowrap">
       {items.map((item) => {
         const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
         return (

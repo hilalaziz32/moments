@@ -4,8 +4,8 @@ import { addDays } from "@moments/core/schedule";
 import { formatPKR } from "@moments/core/money";
 import { requireOrg, canManagePeople } from "@/lib/auth/org";
 import { createClient } from "@/lib/supabase/server";
-import { loadForecast } from "@/lib/planning";
-import { formatDate, formatDateTime } from "@/lib/format";
+import { loadForecast, planOrgNow } from "@/lib/planning";
+import { formatDateTime } from "@/lib/format";
 import { MomentRow, type MomentRowData } from "@/components/moments/moment-row";
 import { DateMark } from "@/components/moments/date-mark";
 
@@ -17,6 +17,16 @@ export default async function DashboardPage() {
   const canEdit = canManagePeople(org.role);
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: org.timezone }).format(new Date());
   const in14 = addDays(today, 14);
+
+  // Self-heal: an org that went live before the web app planned on go-live has
+  // a forecast but nothing planned, so Today and Moments disagreed. Planning is
+  // idempotent, so doing it here when nothing is on the books is safe.
+  if (org.status !== "trial") {
+    const { count: planned } = await supabase
+      .from("moment_events").select("id", { count: "exact", head: true })
+      .eq("org_id", org.orgId).gte("occurs_on", today);
+    if (!planned) await planOrgNow(org.orgId);
+  }
 
   const [{ data: events }, { data: attention }, { data: orgRow }, { count: people }, { count: missingDates }, forecast] =
     await Promise.all([
@@ -168,7 +178,6 @@ export default async function DashboardPage() {
                   </p>
                   <p className="truncate text-xs text-ink-muted">
                     {p.milestoneYears ? `${p.milestoneYears} year anniversary` : forecast?.labels.get(p.momentKey) ?? p.momentKey}
-                    {" · "}{formatDate(p.occursOn)}
                   </p>
                 </div>
                 <span data-numeric className="shrink-0 text-sm text-ink-muted">{formatPKR(p.budgetPaisa)}</span>

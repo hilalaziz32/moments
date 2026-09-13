@@ -102,7 +102,7 @@ export function BudgetGrid({
               */}
               <input type="hidden" name="policy" value={p.id} />
               <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
-                <label className="flex min-w-0 flex-1 items-center gap-3">
+                <label className="flex min-w-0 basis-full items-center gap-3 sm:min-w-[13rem] sm:flex-1 sm:basis-0">
                   <input
                     type="checkbox"
                     name={`enabled:${p.id}`}
@@ -115,7 +115,7 @@ export function BudgetGrid({
                     <span className="block truncate text-sm font-medium text-ink">{p.label}</span>
                     <span className="block text-xs text-ink-faint">
                       {p.upcomingCount === 0
-                        ? "none coming up in 90 days"
+                        ? "None in the next 90 days"
                         : `${p.upcomingCount} in the next 90 days`}
                     </span>
                     {l.enabled && p.gifts.length > 0 && (
@@ -124,7 +124,7 @@ export function BudgetGrid({
                   </span>
                 </label>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 pl-7 sm:pl-0">
                   <span className="text-xs text-ink-muted">PKR</span>
                   <input
                     type="number"

@@ -55,7 +55,29 @@ export default async function EmployeesPage() {
         </p>
       )}
 
-      <div className="mt-6 overflow-x-auto rounded-lg border border-rule bg-card">
+      {/* Phones: one card per person. The table's date columns fell off-screen at 390px. */}
+      <ul className="mt-6 divide-y divide-rule overflow-hidden rounded-lg border border-rule bg-card sm:hidden">
+        {rows.map((e) => (
+          <li key={e.id}>
+            <Link href={`/employees/${e.id}`} className="flex items-center justify-between gap-3 px-4 py-3 active:bg-surface-sunk">
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-medium text-ink">{e.preferred_name || e.full_name}</span>
+                <span className="block truncate text-xs text-ink-muted">
+                  {[e.job_title, e.department].filter(Boolean).join(" · ") || "No title yet"}
+                </span>
+              </span>
+              <span className="shrink-0 text-right text-xs">
+                {e.date_of_birth
+                  ? <span className="block text-ink-muted">Birthday {formatDate(e.date_of_birth, { year: false })}</span>
+                  : <span className="block text-state-waiting">no birthday</span>}
+                {e.exit_date && <span className="block text-ink-faint">Leaving {formatDate(e.exit_date, { year: false })}</span>}
+              </span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+
+      <div className="mt-6 hidden overflow-x-auto rounded-lg border border-rule bg-card sm:block">
         <table className="w-full min-w-[42rem] text-left text-sm">
           <caption className="sr-only">Everyone in {org.orgName}</caption>
           <thead>
