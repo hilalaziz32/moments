@@ -20,6 +20,12 @@ export default function LoginPage() {
         ]}
       />
 
+      <p className="mt-4 text-sm">
+        <Link href="/forgot-password" className="text-ink-muted underline underline-offset-4 hover:text-ink">
+          Forgot your password?
+        </Link>
+      </p>
+
       <p className="mt-6 text-sm text-ink-muted">
         New here?{" "}
         <Link href="/signup" className="font-medium text-ink underline underline-offset-4">

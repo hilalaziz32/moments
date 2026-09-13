@@ -7,7 +7,7 @@ import { normalizePhone } from "@moments/core/csv";
 import { createClient } from "@/lib/supabase/server";
 import { requireUser } from "@/lib/auth/guard";
 import { canManagePeople, requireOrg } from "@/lib/auth/org";
-import { requestDetectorRun } from "@/lib/internal-api";
+import { planOrgNow } from "@/lib/planning";
 import type { ActionResult } from "@/app/actions/onboarding";
 
 /**
@@ -30,12 +30,13 @@ function todayIn(timeZone: string): string {
     .format(new Date());
 }
 
-function afterChange(orgId: string, employeeId: string) {
+async function afterChange(orgId: string, employeeId: string) {
+  // Plan first, so the pages revalidated below already show the new moment.
+  await planOrgNow(orgId);
   revalidatePath(`/employees/${employeeId}`);
   revalidatePath("/employees");
   revalidatePath("/moments");
   revalidatePath("/dashboard");
-  return requestDetectorRun(orgId);
 }
 
 /* ------------------------------------------------------------------- news */
@@ -207,6 +208,137 @@ export async function clearLeaving(fd: FormData): Promise<void> {
     .not("status", "in", UNFINISHED);
 
   await afterChange(org.orgId, employeeId);
+}
+
+/* ------------------------------------------------------------ edit person */
+
+const SHIRT_SIZES = ["XS", "S", "M", "L", "XL", "XXL", "XXXL"] as const;
+
+/**
+ * Fix someone's details without re-importing the whole sheet.
+ *
+ * Changing a birthday or joining date makes already-planned moments wrong, so
+ * those not yet under way are cancelled and planned again from the new date.
+ * Opting out cancels everything still to come.
+ */
+export async function updatePerson(_prev: unknown, fd: FormData): Promise<ActionResult<{ note: string }>> {
+  const org = await requireOrg();
+  if (!canManagePeople(org.role)) return { error: "Only HR admins can edit people." };
+
+  const get = (k: string) => String(fd.get(k) ?? "").trim();
+  const employeeId = get("employeeId");
+  const today = todayIn(org.timezone);
+
+  const fullName = get("fullName");
+  const preferredName = get("preferredName");
+  const workEmail = get("workEmail").toLowerCase();
+  const personalEmail = get("personalEmail").toLowerCase();
+  const dateOfBirth = get("dateOfBirth");
+  const hireDate = get("hireDate");
+  const shirtSize = get("shirtSize");
+  const allergies = get("allergies").split(",").map((a) => a.trim()).filter(Boolean).slice(0, 20);
+
+  const fieldErrors: Record<string, string> = {};
+  if (fullName.length < 1 || fullName.length > 200) fieldErrors.fullName = "Enter their full name.";
+  if (workEmail && !EMAIL.test(workEmail)) fieldErrors.workEmail = "That doesn't look like an email address.";
+  if (personalEmail && !EMAIL.test(personalEmail)) fieldErrors.personalEmail = "That doesn't look like an email address.";
+
+  const phones: Record<string, string | null> = {};
+  for (const key of ["phone", "whatsapp"] as const) {
+    const raw = get(key);
+    if (!raw) { phones[key] = null; continue; }
+    const parsed = normalizePhone(raw);
+    if (parsed.ok) phones[key] = parsed.e164;
+    else fieldErrors[key] = "Enter a mobile number like 0300 1234567.";
+  }
+  if (!workEmail && !personalEmail && !phones.phone) fieldErrors.phone = "Keep at least a phone number or an email.";
+  if (dateOfBirth && (!ISO_DATE.test(dateOfBirth) || dateOfBirth >= today || dateOfBirth <= "1930-01-01")) {
+    fieldErrors.dateOfBirth = "Pick a real date of birth.";
+  }
+  if (hireDate && (!ISO_DATE.test(hireDate) || hireDate <= "1970-01-01")) fieldErrors.hireDate = "Pick a real joining date.";
+  if (shirtSize && !SHIRT_SIZES.includes(shirtSize as (typeof SHIRT_SIZES)[number])) fieldErrors.shirtSize = "Pick a size.";
+  if (Object.keys(fieldErrors).length) return { error: "Check the highlighted fields.", fieldErrors };
+
+  const supabase = await createClient();
+  const { data: before } = await supabase
+    .from("employees")
+    .select("date_of_birth, hire_date, celebration_opt_out")
+    .eq("id", employeeId).eq("org_id", org.orgId).is("deleted_at", null)
+    .maybeSingle();
+  if (!before) return { error: "We couldn't find that person." };
+
+  const optOut = fd.get("celebrationOptOut") === "on";
+  const { error } = await supabase
+    .from("employees")
+    .update({
+      full_name: fullName,
+      preferred_name: preferredName || null,
+      work_email: workEmail || null,
+      personal_email: personalEmail || null,
+      phone_e164: phones.phone,
+      whatsapp_e164: phones.whatsapp,
+      date_of_birth: dateOfBirth || null,
+      hire_date: hireDate || null,
+      job_title: get("jobTitle") || null,
+      department: get("department") || null,
+      manager_id: get("managerId") && get("managerId") !== employeeId ? get("managerId") : null,
+      halal_only: fd.get("halalOnly") === "on",
+      is_vegetarian: fd.get("isVegetarian") === "on",
+      needs_eggless: fd.get("needsEggless") === "on",
+      allergies,
+      shirt_size: (shirtSize || null) as (typeof SHIRT_SIZES)[number] | null,
+      celebration_opt_out: optOut,
+      hide_birth_year: fd.get("hideBirthYear") === "on",
+    })
+    .eq("id", employeeId)
+    .eq("org_id", org.orgId);
+
+  if (error) {
+    if (error.code === "23505") return { error: "Someone else on the team already has that email.", fieldErrors: { workEmail: "Already used." } };
+    if (error.code === "23514") return { error: "Check the dates: a last day can't be before a joining date." };
+    return { error: "Couldn't save. Try again." };
+  }
+
+  const now = new Date().toISOString();
+  if (optOut && !before.celebration_opt_out) {
+    await supabase.from("moment_events")
+      .update({ status: "cancelled", cancelled_at: now, cancel_reason: "Asked not to be celebrated" })
+      .eq("org_id", org.orgId).eq("employee_id", employeeId).not("status", "in", UNFINISHED);
+  } else if ((dateOfBirth || null) !== before.date_of_birth || (hireDate || null) !== before.hire_date) {
+    // Birthday / anniversary / new-hire moments are keyed on the old date.
+    // Life events (evt:) and farewells (exit:) are not affected.
+    await supabase.from("moment_events")
+      .update({ status: "cancelled", cancelled_at: now, cancel_reason: "Date corrected" })
+      .eq("org_id", org.orgId).eq("employee_id", employeeId)
+      .in("status", ["detected", "scheduled", "needs_info"])
+      .not("occurrence_key", "like", "evt:%")
+      .not("occurrence_key", "like", "exit:%");
+  }
+
+  await afterChange(org.orgId, employeeId);
+  return { success: true, note: "Saved." };
+}
+
+/** Takes someone off the team. Their record is kept for history; nothing more is planned. */
+export async function removePerson(fd: FormData): Promise<void> {
+  const org = await requireOrg();
+  if (!canManagePeople(org.role)) return;
+  const employeeId = String(fd.get("employeeId") ?? "");
+
+  const supabase = await createClient();
+  await supabase
+    .from("employees")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", employeeId)
+    .eq("org_id", org.orgId);
+  await supabase.from("moment_events")
+    .update({ status: "cancelled", cancelled_at: new Date().toISOString(), cancel_reason: "Removed from the team" })
+    .eq("org_id", org.orgId).eq("employee_id", employeeId).not("status", "in", UNFINISHED);
+
+  revalidatePath("/employees");
+  revalidatePath("/moments");
+  revalidatePath("/dashboard");
+  redirect("/employees");
 }
 
 /* ------------------------------------------------------------- add person */

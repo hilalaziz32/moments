@@ -1,6 +1,6 @@
 import {
-  addDays, computeMomentPlans, LIFE_EVENT_LOOKBACK_DAYS, type EmployeeForPlanning,
-  type LifeEventForPlanning, type MomentKey, type PolicyForPlanning, type PlannedTask,
+  addDays, computeMomentPlans, LIFE_EVENT_LOOKBACK_DAYS, momentEventRow, momentTaskRow,
+  type EmployeeForPlanning, type LifeEventForPlanning, type MomentKey, type PolicyForPlanning,
 } from "@moments/core/schedule";
 import { db } from "../lib/supabase.js";
 import { logger } from "../lib/logger.js";
@@ -13,6 +13,10 @@ import { config } from "../config.js";
  * ON CONFLICT DO NOTHING against
  * moment_events(org_id, employee_id, moment_type_id, occurrence_key), so it can
  * be run hourly, twice at once, or replayed, and it cannot double-fire.
+ *
+ * The web app runs the same planning (apps/web/lib/planning.ts) the moment HR
+ * goes live or logs news, so customers see their moments without waiting for
+ * 00:15. Both use the shared row builders in @moments/core.
  */
 
 export async function runDetector(opts: { orgId?: string; horizonDays?: number } = {}) {
@@ -162,64 +166,41 @@ async function detectForOrg(
 
   let eventCount = 0;
   let taskCount = 0;
+  const capturedAt = new Date().toISOString();
 
   // Chunked: the service-role connection is not subject to the 8s
   // authenticator timeout, but a 5,000-row insert still deserves batching.
   const CHUNK = 100;
   for (let i = 0; i < plans.length; i += CHUNK) {
     const slice = plans.slice(i, i + CHUNK);
-
-    const rows = slice.map((p) => ({
-      org_id: p.orgId,
-      employee_id: p.employeeId,
-      moment_type_id: p.momentTypeId || typeIdByKey.get(p.momentKey) || "",
-      policy_id: p.policyId,
-      occurrence_key: p.occurrenceKey,
-      occurs_on: p.occursOn,
-      timezone: p.timezone,
-      announce_local_time: p.announceLocalTime,
-      status: "scheduled" as const,
-      budget_paisa: p.budgetPaisa,
-      approval_required: p.approvalRequired,
-      announcement_enabled: true,
-      announce_publicly: p.announcePublicly,
-      milestone_years: p.milestoneYears,
-      occurrence_note: p.occurrenceNote,
-      is_provisional: p.isProvisional,
-      // The policy AS OF materialisation. Raising the birthday budget on the
-      // 25th must not silently change a moment already through gift selection.
-      policy_snapshot: {
-        budgetPaisa: p.budgetPaisa,
-        approvalRequired: p.approvalRequired,
-        announceLocalTime: p.announceLocalTime,
-        announcePublicly: p.announcePublicly,
-        capturedAt: new Date().toISOString(),
-      } as never,
-    }));
+    const rows = slice.map((p) => momentEventRow(p, typeIdByKey.get(p.momentKey) ?? "", capturedAt));
 
     const { data: inserted, error } = await db
       .from("moment_events")
-      .upsert(rows, {
+      .upsert(rows as never, {
         onConflict: "org_id,employee_id,moment_type_id,occurrence_key",
         ignoreDuplicates: true,
       })
-      .select("id, occurrence_key, employee_id, occurs_on, timezone");
+      .select("id, occurrence_key, employee_id");
 
     if (error) {
       logger.error({ org_id: org.id, err: error.message }, "could not upsert moment events");
       continue;
     }
 
-    const newEvents = inserted ?? [];
+    const newEvents = (inserted ?? []) as { id: string; occurrence_key: string; employee_id: string | null }[];
     eventCount += newEvents.length;
 
     const byKey = new Map(newEvents.map((e) => [`${e.employee_id ?? "org"}:${e.occurrence_key}`, e.id]));
     const taskRows: Record<string, unknown>[] = [];
+    const now = Date.now();
 
     for (const p of slice) {
       const eventId = byKey.get(`${p.employeeId ?? "org"}:${p.occurrenceKey}`);
       if (!eventId) continue;   // already existed; its tasks exist too
-      for (const t of p.tasks) taskRows.push(taskRow(p.orgId, eventId, t));
+      for (const t of p.tasks) {
+        taskRows.push(momentTaskRow(p.orgId, eventId, t, now, 120_000 + Math.random() * 180_000));
+      }
     }
 
     for (let j = 0; j < taskRows.length; j += 200) {
@@ -238,55 +219,4 @@ async function detectForOrg(
   }
 
   return { events: eventCount, tasks: taskCount, suppressed: suppressed.length };
-}
-
-/**
- * Converts a planned task into a row.
- *
- * COMPRESSION: when an org goes live two days before a birthday, some tasks are
- * already in the past. `run_now` work is staggered a couple of minutes out rather
- * than fired in one burst; `skip` work is dropped; `preserve` work (announce,
- * nudge) keeps its wall-clock meaning and is left for the late-announcement
- * policy to decide.
- */
-function taskRow(orgId: string, eventId: string, t: PlannedTask): Record<string, unknown> {
-  const scheduled = localInstant(t.onDate, t.atTime, t.timezone);
-  const isPast = scheduled.getTime() < Date.now();
-
-  let nextAttempt = scheduled;
-  if (isPast && t.onLate === "run_now") {
-    nextAttempt = new Date(Date.now() + 120_000 + Math.random() * 180_000);
-  }
-
-  return {
-    org_id: orgId,
-    moment_event_id: eventId,
-    task_type: t.taskType,
-    lane: t.lane,
-    scheduled_for: scheduled.toISOString(),
-    next_attempt_at: nextAttempt.toISOString(),
-    late_threshold_seconds: t.lateThresholdSeconds,
-    max_attempts: t.maxAttempts,
-    status: isPast && t.onLate === "skip" ? "skipped" : "pending",
-    priority: t.lane === "announce" ? 10 : 100,
-  };
-}
-
-/** Date arithmetic in the org timezone, THEN convert. Never add intervals to an instant. */
-function localInstant(onDate: string, atTime: string, timezone: string): Date {
-  const [y, m, d] = onDate.split("-").map(Number) as [number, number, number];
-  const [hh, mm] = atTime.split(":").map(Number) as [number, number];
-  const guess = Date.UTC(y, m - 1, d, hh, mm);
-  // Resolve the zone offset at that wall-clock moment, then correct.
-  const fmt = new Intl.DateTimeFormat("en-US", {
-    timeZone: timezone, hour12: false,
-    year: "numeric", month: "2-digit", day: "2-digit",
-    hour: "2-digit", minute: "2-digit",
-  });
-  const parts = Object.fromEntries(fmt.formatToParts(new Date(guess)).map((p) => [p.type, p.value]));
-  const asUtc = Date.UTC(
-    Number(parts.year), Number(parts.month) - 1, Number(parts.day),
-    Number(parts.hour) % 24, Number(parts.minute),
-  );
-  return new Date(guess - (asUtc - guess));
 }

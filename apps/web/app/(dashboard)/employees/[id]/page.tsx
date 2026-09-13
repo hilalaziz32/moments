@@ -88,7 +88,14 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
     <div className="space-y-10">
       <div>
         <Link href="/employees" className="text-sm text-ink-muted hover:text-ink">← Team</Link>
-        <h1 className="mt-3 text-xl font-semibold text-ink">{name}</h1>
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+          <h1 className="text-xl font-semibold text-ink">{name}</h1>
+          {canEdit && (
+            <Link href={`/employees/${emp.id}/edit`} className="rounded-md border border-input px-3 py-1.5 text-sm text-ink hover:bg-surface-sunk">
+              Edit details
+            </Link>
+          )}
+        </div>
         <p className="mt-1 text-sm text-ink-muted">
           {[emp.job_title, emp.department].filter(Boolean).join(" · ") || "No title yet"}
         </p>

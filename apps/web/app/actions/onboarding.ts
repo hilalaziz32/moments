@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireUser } from "@/lib/auth/guard";
 import { requireOrg, isOrgAdmin, ACTIVE_ORG_COOKIE } from "@/lib/auth/org";
 import { employeeImportRowSchema } from "@moments/contracts";
+import { planOrgNow } from "@/lib/planning";
 
 /**
  * Server action result.
@@ -121,7 +122,7 @@ export async function stageImport(payload: {
 export async function commitImport(
   batchId: string,
 ): Promise<ActionResult<{ imported: number; updated: number }>> {
-  await requireOrg();
+  const org = await requireOrg();
   const supabase = await createClient();
 
   let imported = 0;
@@ -141,6 +142,9 @@ export async function commitImport(
     updated += row.updated;
     if (row.remaining === 0) break;
   }
+
+  // A re-import after going live can bring new hires and changed dates.
+  if (org.status !== "trial") await planOrgNow(org.orgId);
 
   revalidatePath("/", "layout");
   return { success: true, imported, updated };
@@ -224,6 +228,9 @@ export async function saveBudgets(
       .eq("id", org.orgId);
   }
 
+  // Switching a moment on after going live should plan it straight away.
+  if (org.status !== "trial") await planOrgNow(org.orgId);
+
   revalidatePath("/", "layout");
   if (mode === "settings") return { success: true };
   redirect("/setup/review");
@@ -250,6 +257,9 @@ export async function goLive(_prev: unknown, formData: FormData): Promise<Action
     .eq("id", org.orgId);
 
   if (error) return { error: error.message };
+
+  // Plan now so the dashboard they land on already shows their people.
+  await planOrgNow(org.orgId);
 
   revalidatePath("/", "layout");
   redirect("/dashboard");

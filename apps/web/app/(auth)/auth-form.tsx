@@ -15,15 +15,25 @@ interface FieldSpec {
 }
 
 export function AuthForm({
-  action, fields, submitLabel,
+  action, fields, submitLabel, successMessage,
 }: {
   action: (prev: unknown, formData: FormData) => Promise<ActionResult>;
   fields: FieldSpec[];
   submitLabel: string;
+  /** Shown instead of the form once the action succeeds without redirecting. */
+  successMessage?: string;
 }) {
   const [state, formAction, pending] = useActionState(action, null as ActionResult | null);
   const fieldErrors = state && "fieldErrors" in state ? state.fieldErrors : undefined;
   const formError = state && "error" in state ? state.error : null;
+
+  if (successMessage && state && "success" in state) {
+    return (
+      <p role="status" className="mt-8 rounded-lg border border-rule bg-surface-sunk px-4 py-3 text-sm text-ink">
+        {successMessage}
+      </p>
+    );
+  }
 
   return (
     <form action={formAction} className="mt-8 space-y-5">
