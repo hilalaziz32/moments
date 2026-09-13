@@ -3,13 +3,14 @@ import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth/guard";
 import { getActiveOrg } from "@/lib/auth/org";
 import { CreateOrgForm } from "@/components/onboarding/create-org-form";
+import { resumeSetupPath } from "@/lib/setup-step";
 
 export const metadata: Metadata = { title: "Set up your company" };
 
 export default async function SetupPage() {
   await requireUser();
   const org = await getActiveOrg();
-  if (org) redirect("/setup/import");
+  if (org) redirect(await resumeSetupPath(org));
 
   return (
     <div>

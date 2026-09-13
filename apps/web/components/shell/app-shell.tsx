@@ -5,10 +5,12 @@ import type { CurrentUser } from "@/lib/auth/guard";
 import { canManageBilling, canManagePeople } from "@/lib/auth/org";
 
 export function AppShell({
-  org, user, children,
+  org, user, resumeHref, children,
 }: {
   org: ActiveOrg;
   user: CurrentUser;
+  /** Where unfinished setup continues from; null once the org is live. */
+  resumeHref: string | null;
   children: React.ReactNode;
 }) {
   const nav = [
@@ -55,10 +57,10 @@ export function AppShell({
         </div>
       </header>
 
-      {org.status === "trial" && (
+      {resumeHref && (
         <p className="border-b border-rule bg-surface-sunk px-6 py-2 text-center text-xs text-ink-muted">
           Setup isn&rsquo;t finished.{" "}
-          <Link href="/setup/import" className="font-medium text-ink underline underline-offset-4">
+          <Link href={resumeHref} className="font-medium text-ink underline underline-offset-4">
             Pick up where you left off
           </Link>
         </p>

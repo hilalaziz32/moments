@@ -213,8 +213,18 @@ export async function saveBudgets(
     }
   }
 
-  revalidatePath("/setup/budgets");
-  revalidatePath("/settings/moments");
+  // Budgets are pre-seeded with defaults, so the data alone can't tell whether
+  // this step was done. Record it, so "pick up where you left off" skips ahead.
+  if (!org.onboardingState.budgets_saved_at) {
+    await supabase
+      .from("organizations")
+      .update({
+        onboarding_state: { ...org.onboardingState, budgets_saved_at: new Date().toISOString() } as never,
+      })
+      .eq("id", org.orgId);
+  }
+
+  revalidatePath("/", "layout");
   if (mode === "settings") return { success: true };
   redirect("/setup/review");
 }
@@ -235,7 +245,7 @@ export async function goLive(_prev: unknown, formData: FormData): Promise<Action
       dry_run_until: keepDryRun
         ? new Date(Date.now() + 7 * 86_400_000).toISOString()
         : null,
-      onboarding_state: { completed_at: new Date().toISOString() } as never,
+      onboarding_state: { ...org.onboardingState, completed_at: new Date().toISOString() } as never,
     })
     .eq("id", org.orgId);
 
