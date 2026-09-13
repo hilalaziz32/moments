@@ -4,7 +4,7 @@ import {
 } from "./dates.js";
 import { OFFSETS } from "./offsets.js";
 import type {
-  EmployeeForPlanning, MomentPlan, OrgForPlanning, PlannedTask,
+  EmployeeForPlanning, LifeEventForPlanning, MomentPlan, OrgForPlanning, PlannedTask,
   PolicyForPlanning, SuppressedMoment,
 } from "./types.js";
 
@@ -29,6 +29,8 @@ export interface PlanInput {
     gregorianDate: ISODate;
     status: "predicted" | "confirmed" | "cancelled";
   }[];
+  /** Promotions, weddings, babies and farewells someone told us about. */
+  lifeEvents?: readonly LifeEventForPlanning[];
 }
 
 export interface PlanResult {
@@ -46,6 +48,13 @@ export interface PlanResult {
  */
 export const NEW_HIRE_LOOKBACK_DAYS = 3;
 
+/**
+ * Life events are reported by people, and people report late: the promotion
+ * letter went out on Monday, HR logs it on Thursday. A week late is still worth
+ * celebrating; a month late is not a celebration, it is an awkward reminder.
+ */
+export const LIFE_EVENT_LOOKBACK_DAYS = 7;
+
 const ANNUAL_FROM_BIRTH = "birthday";
 const ANNUAL_FROM_HIRE = "work_anniversary";
 
@@ -57,6 +66,13 @@ export function computeMomentPlans(input: PlanInput): PlanResult {
   const plans: MomentPlan[] = [];
   const suppressed: SuppressedMoment[] = [];
   const enabled = new Map(policies.filter((p) => p.enabled).map((p) => [p.momentKey, p]));
+  // Someone whose farewell was logged by hand must not get a second one from
+  // their exit date.
+  const loggedFarewell = new Set(
+    (input.lifeEvents ?? [])
+      .filter((ev) => ev.momentKey === "farewell" && ev.isCelebrated)
+      .map((ev) => ev.employeeId),
+  );
 
   for (const emp of employees) {
     if (emp.celebrationOptOut) {
@@ -68,8 +84,23 @@ export function computeMomentPlans(input: PlanInput): PlanResult {
 
     const tz = emp.timezone ?? org.timezone;
 
-    // An exited employee gets nothing new. Their farewell is created from an
-    // employee_event, not from this path.
+    // ---------------------------------------------------------------- farewell
+    // Setting someone's last day is how HR tells us they are leaving, so the
+    // farewell follows from the exit date. Keyed on that date: moving the last
+    // day makes a new occurrence, and the web action cancels the old one.
+    const farewellPolicy = enabled.get("farewell");
+    if (farewellPolicy && emp.exitDate && !loggedFarewell.has(emp.id)) {
+      if (emp.exitReason === "terminated_for_cause" && !org.celebrateOnTerminatedExit) {
+        suppressed.push({ employeeId: emp.id, momentKey: "farewell", reason: "terminated_for_cause" });
+      } else if (isBetween(emp.exitDate, today, horizonEnd)) {
+        plans.push(buildPlan(emp, org, farewellPolicy, emp.exitDate, null, tz, {
+          occurrenceKey: `exit:${emp.exitDate}`,
+          announceSuppressed: isBlackedOut(org, emp.exitDate),
+        }));
+      }
+    }
+
+    // An exited employee gets nothing new apart from the farewell above.
     if (emp.status === "exited") {
       for (const p of enabled.values()) {
         if (p.momentKey !== "farewell") {
@@ -147,6 +178,37 @@ export function computeMomentPlans(input: PlanInput): PlanResult {
         }
       }
     }
+  }
+
+  // ------------------------------------------------------------- life events
+  // Promotions, weddings, babies: no HR spreadsheet has these. HR (or a manager)
+  // logs them, and the occurrence key is the event row itself.
+  const byId = new Map(employees.map((e) => [e.id, e]));
+  const lookbackStart = addDays(today, -LIFE_EVENT_LOOKBACK_DAYS);
+  for (const ev of input.lifeEvents ?? []) {
+    if (!ev.isCelebrated) continue;
+    const emp = byId.get(ev.employeeId);
+    if (!emp || emp.celebrationOptOut) continue;   // opt-outs were reported above
+    if (emp.status === "exited" && ev.momentKey !== "farewell") continue;
+
+    const policy = enabled.get(ev.momentKey);
+    if (!policy) {
+      suppressed.push({ employeeId: emp.id, momentKey: ev.momentKey, reason: "policy_disabled" });
+      continue;
+    }
+    if (ev.momentKey === "farewell" && emp.exitReason === "terminated_for_cause" && !org.celebrateOnTerminatedExit) {
+      suppressed.push({ employeeId: emp.id, momentKey: "farewell", reason: "terminated_for_cause" });
+      continue;
+    }
+    if (!isBetween(ev.eventDate, lookbackStart, horizonEnd)) {
+      suppressed.push({ employeeId: emp.id, momentKey: ev.momentKey, reason: "outside_horizon" });
+      continue;
+    }
+
+    plans.push(buildPlan(emp, org, policy, ev.eventDate, null, emp.timezone ?? org.timezone, {
+      occurrenceKey: `evt:${ev.id}`,
+      announceSuppressed: isBlackedOut(org, ev.eventDate),
+    }));
   }
 
   // ------------------------------------------------------- lunar observances

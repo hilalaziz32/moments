@@ -53,6 +53,15 @@ export const webConfig = Object.freeze({
     verifyToken: optionalServerEnv("WHATSAPP_VERIFY_TOKEN"),
     phoneNumberId: optionalServerEnv("WHATSAPP_PHONE_NUMBER_ID"),
   }),
+  /** SMS. The same Twilio account the worker sends from. */
+  twilio: Object.freeze({
+    accountSid: optionalServerEnv("TWILIO_ACCOUNT_SID"),
+    authToken: optionalServerEnv("TWILIO_AUTH_TOKEN"),
+    fromNumber: optionalServerEnv("TWILIO_FROM_NUMBER"),
+    messagingServiceSid: optionalServerEnv("TWILIO_MESSAGING_SERVICE_SID"),
+    /** Exactly the URL Twilio calls; the signature is computed over it. */
+    statusCallbackUrl: optionalServerEnv("TWILIO_STATUS_CALLBACK_URL"),
+  }),
   email: Object.freeze({
     resendApiKey: optionalServerEnv("RESEND_API_KEY"),
     from: optionalServerEnv("EMAIL_FROM", "Moments <notify@moments.pk>"),

@@ -3852,12 +3852,12 @@ export interface Database {
       alert_status: "open" | "acknowledged" | "resolved";
       approval_decision: "pending" | "approved" | "rejected" | "expired" | "auto_approved" | "cancelled";
       approver_kind: "hr" | "manager" | "finance" | "owner";
-      channel: "email" | "whatsapp" | "slack" | "in_app";
+      channel: "email" | "whatsapp" | "slack" | "in_app" | "sms";
       delivery_target: "home" | "office" | "none" | "employee_choice";
       employee_status: "active" | "on_leave" | "notice_period" | "exited";
       import_batch_status: "uploaded" | "validating" | "validated" | "importing" | "completed" | "completed_with_errors" | "failed" | "reverted";
       import_row_status: "pending" | "valid" | "invalid" | "imported" | "updated" | "skipped" | "duplicate";
-      integration_provider: "slack" | "whatsapp_cloud" | "email_resend" | "email_smtp" | "webhook";
+      integration_provider: "slack" | "whatsapp_cloud" | "email_resend" | "email_smtp" | "webhook" | "twilio";
       integration_status: "pending" | "connected" | "error" | "revoked" | "disconnected";
       invoice_kind: "subscription" | "gifts" | "combined" | "credit_note" | "wallet_topup";
       invoice_status: "draft" | "issued" | "sent" | "partially_paid" | "paid" | "overdue" | "void" | "written_off";

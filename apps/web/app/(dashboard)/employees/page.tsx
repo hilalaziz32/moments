@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { requireOrg } from "@/lib/auth/org";
+import { canManagePeople, requireOrg } from "@/lib/auth/org";
 import { createClient } from "@/lib/supabase/server";
+import { formatDate } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 
 export const metadata: Metadata = { title: "Team" };
@@ -9,10 +10,11 @@ export const metadata: Metadata = { title: "Team" };
 export default async function EmployeesPage() {
   const org = await requireOrg();
   const supabase = await createClient();
+  const canEdit = canManagePeople(org.role);
 
   const { data: employees } = await supabase
     .from("employees")
-    .select("id, full_name, preferred_name, work_email, department, job_title, date_of_birth, hire_date, status")
+    .select("id, full_name, preferred_name, department, job_title, date_of_birth, hire_date, exit_date, status")
     .eq("org_id", org.orgId)
     .is("deleted_at", null)
     .order("full_name")
@@ -27,10 +29,24 @@ export default async function EmployeesPage() {
         <h1 className="text-xl font-semibold text-ink">
           Team <span className="font-normal text-ink-faint">{rows.length}</span>
         </h1>
-        <Button asChild variant="outline" size="sm">
-          <Link href="/setup/import">Import more people</Link>
-        </Button>
+        {canEdit && (
+          <div className="flex gap-2">
+            <Button asChild variant="outline" size="sm">
+              <Link href="/setup/import">Import a sheet</Link>
+            </Button>
+            <Button asChild size="sm">
+              <Link href="/employees/new">Add a person</Link>
+            </Button>
+          </div>
+        )}
       </div>
+
+      {canEdit && (
+        <p className="mt-4 text-sm text-ink-muted">
+          Birthdays and work anniversaries come from the sheet. Promotions, weddings, new babies and
+          people leaving don&rsquo;t, so open someone to tell us.
+        </p>
+      )}
 
       {incomplete > 0 && (
         <p className="mt-4 rounded-lg border border-rule bg-surface-sunk px-4 py-3 text-sm text-ink-muted">
@@ -52,20 +68,27 @@ export default async function EmployeesPage() {
           </thead>
           <tbody>
             {rows.map((e) => (
-              <tr key={e.id} className="border-b border-rule last:border-0">
+              <tr key={e.id} className="border-b border-rule last:border-0 hover:bg-surface-sunk">
                 <td className="px-5 py-3">
-                  <span className="font-medium text-ink">{e.preferred_name || e.full_name}</span>
+                  <Link href={`/employees/${e.id}`} className="font-medium text-ink underline-offset-4 hover:underline">
+                    {e.preferred_name || e.full_name}
+                  </Link>
                   {e.job_title && <span className="block text-xs text-ink-faint">{e.job_title}</span>}
+                  {e.exit_date && (
+                    <span className="block text-xs text-ink-muted">
+                      {e.status === "exited" ? "Left" : "Leaving"} {formatDate(e.exit_date)}
+                    </span>
+                  )}
                 </td>
                 <td className="px-5 py-3 text-ink-muted">{e.department ?? "—"}</td>
                 <td className="px-5 py-3">
                   {e.date_of_birth
-                    ? <time data-numeric dateTime={e.date_of_birth} className="text-ink-muted">{fmt(e.date_of_birth)}</time>
+                    ? <time data-numeric dateTime={e.date_of_birth} className="text-ink-muted">{formatDate(e.date_of_birth)}</time>
                     : <span className="text-state-waiting">missing</span>}
                 </td>
                 <td className="px-5 py-3">
                   {e.hire_date
-                    ? <time data-numeric dateTime={e.hire_date} className="text-ink-muted">{fmt(e.hire_date)}</time>
+                    ? <time data-numeric dateTime={e.hire_date} className="text-ink-muted">{formatDate(e.hire_date)}</time>
                     : <span className="text-state-waiting">missing</span>}
                 </td>
               </tr>
@@ -75,10 +98,4 @@ export default async function EmployeesPage() {
       </div>
     </div>
   );
-}
-
-function fmt(iso: string): string {
-  const [y, m, d] = iso.split("-");
-  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-  return `${Number(d)} ${months[Number(m) - 1]} ${y}`;
 }

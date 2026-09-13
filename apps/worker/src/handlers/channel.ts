@@ -1,5 +1,7 @@
-import { PermanentTaskError } from "@moments/contracts";
+import { PermanentTaskError, RetryableTaskError } from "@moments/contracts";
 import type { TaskContext } from "../poller/types.js";
+import { sendSms, twilioConfigured, TwilioError } from "../lib/twilio.js";
+import { smsSettings } from "./sms.js";
 
 /**
  * The send boundary.
@@ -11,20 +13,23 @@ import type { TaskContext } from "../poller/types.js";
  *     which the reconciler resolves by QUERYING THE PROVIDER rather than
  *     blindly resending.
  *
- * Slack / WhatsApp / email transports are not wired yet. Until they are, a send
- * is recorded and logged rather than delivered -- which is also exactly what
- * dry-run mode does for a live org, so the path is the same one production uses.
+ * SMS is delivered through Twilio. Email, Slack and WhatsApp transports are not
+ * wired yet (email is on hold until there are customers), so those sends are
+ * recorded and logged rather than delivered.
  */
+
+export type Channel = "email" | "whatsapp" | "slack" | "in_app" | "sms";
 
 export interface SendRequest {
   orgId: string;
   momentEventId: string | null;
   taskId: string;
   employeeId?: string | null;
-  channel: "email" | "whatsapp" | "slack" | "in_app";
+  channel: Channel;
   audience:
     | "company_announcement" | "manager_nudge" | "employee_dm" | "hr_digest"
     | "approval_request" | "address_verification" | "ops_alert";
+  /** Email address, E.164 phone number, or Slack channel. */
   recipientRef: string;
   subject?: string | null;
   body: string;
@@ -33,7 +38,9 @@ export interface SendRequest {
   sensitive?: boolean;
 }
 
-export async function send(ctx: TaskContext, req: SendRequest): Promise<"sent" | "already_sent"> {
+export type SendResult = "sent" | "already_sent" | "not_delivered" | "failed";
+
+export async function send(ctx: TaskContext, req: SendRequest): Promise<SendResult> {
   const { data: org } = await ctx.db
     .from("organizations")
     .select("dry_run_until")
@@ -67,19 +74,73 @@ export async function send(ctx: TaskContext, req: SendRequest): Promise<"sent" |
     throw new PermanentTaskError(`could not record the outbound message: ${error.message}`);
   }
 
-  // TODO(phase-4): dispatch to Slack / WhatsApp / Resend here, then record the
-  // provider message id so the reconciler can verify rather than resend.
+  if (req.channel === "sms") return deliverSms(ctx, req, isPreview);
+
+  // TODO: email / Slack / WhatsApp transports.
   ctx.log.info(
     { channel: req.channel, audience: req.audience, isPreview },
-    isPreview ? "preview recorded (dry run)" : "message queued (transport not yet wired)",
+    isPreview ? "preview recorded (dry run)" : "message recorded (transport not wired)",
   );
+  await mark(ctx, req, { status: "sent", sent_at: new Date().toISOString() });
+  return "sent";
+}
 
+/**
+ * SMS through Twilio.
+ *
+ * DRY RUN: a live customer's employees must not get texts during the preview
+ * week, so the message goes to the org's test phone instead -- which is also how
+ * HR sees exactly what their people will receive. No test phone, no send.
+ */
+async function deliverSms(ctx: TaskContext, req: SendRequest, isPreview: boolean): Promise<SendResult> {
+  if (!twilioConfigured()) {
+    await mark(ctx, req, { status: "suppressed", error_code: "sms_not_configured",
+      error_message: "Twilio credentials are not set on the worker." });
+    ctx.log.warn({ audience: req.audience }, "sms not delivered: Twilio is not configured");
+    return "not_delivered";
+  }
+
+  const settings = await smsSettings(ctx.db, req.orgId);
+  const to = isPreview ? settings.testPhone : req.recipientRef;
+  if (!to) {
+    await mark(ctx, req, { status: "suppressed", error_code: "preview_without_test_phone",
+      error_message: "Dry run is on and no test phone is set, so nothing was texted." });
+    return "not_delivered";
+  }
+
+  const body = isPreview ? `[PREVIEW] ${req.body}` : req.body;
+
+  try {
+    const { sid } = await sendSms(to, body, { signal: ctx.signal });
+    await mark(ctx, req, { status: "sent", sent_at: new Date().toISOString(), provider_message_id: sid });
+    ctx.log.info({ audience: req.audience, isPreview }, "sms sent");
+    return "sent";
+  } catch (err) {
+    if (err instanceof TwilioError && err.retryable) {
+      // Twilio created nothing, so release the idempotency key and let the
+      // task's retry send it again.
+      await ctx.db.from("outbound_messages").delete().eq("idempotency_key", req.idempotencyKey);
+      throw new RetryableTaskError(`Twilio unavailable: ${err.message}`, err.httpStatus === 429 ? 60 : 120);
+    }
+    // A bad or unsubscribed number will not fix itself. Record it and carry on:
+    // one unreachable phone must not fail the whole moment.
+    const e = err instanceof TwilioError ? err : null;
+    await mark(ctx, req, {
+      status: "failed",
+      failed_at: new Date().toISOString(),
+      error_code: e?.code ? String(e.code) : "sms_failed",
+      error_message: err instanceof Error ? err.message : String(err),
+    });
+    ctx.log.warn({ audience: req.audience, code: e?.code }, "sms rejected by Twilio");
+    return "failed";
+  }
+}
+
+async function mark(ctx: TaskContext, req: SendRequest, patch: Record<string, unknown>): Promise<void> {
   await ctx.db
     .from("outbound_messages")
-    .update({ status: "sent", sent_at: new Date().toISOString() } as never)
+    .update(patch as never)
     .eq("idempotency_key", req.idempotencyKey);
-
-  return "sent";
 }
 
 /**

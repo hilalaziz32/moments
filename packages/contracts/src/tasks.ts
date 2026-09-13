@@ -27,7 +27,7 @@ export const taskPayloadSchema = z.discriminatedUnion("taskType", [
   z.object({ taskType: z.literal("prepare_announcement"), ...base }),
   z.object({ taskType: z.literal("announce"), ...base }),
   z.object({ taskType: z.literal("deliver_message"), ...base,
-             channel: z.enum(["email","whatsapp","slack","in_app"]),
+             channel: z.enum(["email","whatsapp","slack","in_app","sms"]),
              audience: z.string(), recipientRef: z.string(), idempotencyKey: z.string() }),
   z.object({ taskType: z.literal("nudge_manager"), ...base }),
   z.object({ taskType: z.literal("confirm_delivery"), ...base }),

@@ -12,7 +12,7 @@ const PUBLIC_PREFIXES = [
   "/login", "/signup", "/forgot-password", "/reset-password", "/set-password",
   "/accept-invite", "/auth/callback", "/auth/confirm",
   "/c/", "/a/", "/f/", "/i/",
-  "/api/slack", "/api/whatsapp", "/api/email", "/api/health",
+  "/api/slack", "/api/whatsapp", "/api/email", "/api/twilio", "/api/health",
 ];
 
 function isPublic(pathname: string): boolean {

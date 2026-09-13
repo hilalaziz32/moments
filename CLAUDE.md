@@ -28,6 +28,12 @@ Market: Pakistan. Incumbent corporate gifting suppliers sell merchandise in bulk
 - **Data access: supabase-js (PostgREST) + RLS** against the `moments` schema. No ORM.
   Anything PostgREST cannot express is a `SECURITY DEFINER` RPC.
 - **Channels at launch: Email + WhatsApp Business API + Slack.** No MS Teams.
+- **SMS goes through Twilio** (decided 2026-09-13). It carries the messages that must
+  reach a person: address links and reminders, manager notes, approval requests. Never
+  company-wide announcements. **Email (SMTP/Resend) is on hold** until there are paying
+  customers; email sends are still recorded in `outbound_messages`, just not delivered.
+- Where each moment's data comes from, and the HR/manager/employee journeys:
+  `docs/CUSTOMER_JOURNEY.md`.
 - **v1 fulfillment is ops-assisted**: real order records plus an internal ops queue
   where our staff place the vendor order by hand. No vendor API, no vendor portal.
 - Project context stays in this repo. Nothing goes to global `~/.claude` memory.

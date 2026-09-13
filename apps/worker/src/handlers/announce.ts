@@ -1,5 +1,6 @@
 import type { TaskHandler } from "../poller/types.js";
 import { send } from "./channel.js";
+import { smsNumber, smsSettings } from "./sms.js";
 
 /**
  * T-1 18:00 -- pre-render everything.
@@ -126,29 +127,47 @@ export const nudgeManager: TaskHandler = {
 
     const { data: manager } = await ctx.db
       .from("employees")
-      .select("work_email, preferred_name, full_name")
+      .select("work_email, preferred_name, full_name, phone_e164, whatsapp_e164")
       .eq("id", emp.manager_id)
       .single();
 
-    if (!manager?.work_email) return { status: "skipped", reason: "manager_has_no_email" };
+    const sms = await smsSettings(ctx.db, event.org_id);
+    const managerPhone = sms.enabled ? smsNumber(manager) : null;
+    if (!manager?.work_email && !managerPhone) return { status: "skipped", reason: "manager_has_no_email" };
 
     const name = emp.preferred_name || emp.full_name.split(" ")[0];
     const mt = (event.moment_types as unknown as { key: string } | null)?.key ?? "";
     const suggestion = renderManagerNote(mt, name ?? "", event.milestone_years);
 
-    await send(ctx, {
-      orgId: event.org_id,
-      momentEventId: event.id,
-      taskId: ctx.task.id,
-      channel: "email",
-      audience: "manager_nudge",
-      recipientRef: manager.work_email,
-      subject: `A note for ${name} today`,
-      body:
-        `${name} is being celebrated today. A line from you means more than anything we send.\n\n` +
-        `Here's one you can use as-is, or make your own:\n\n"${suggestion}"`,
-      idempotencyKey: ctx.idempotencyKey("manager:email"),
-    });
+    if (manager?.work_email) {
+      await send(ctx, {
+        orgId: event.org_id,
+        momentEventId: event.id,
+        taskId: ctx.task.id,
+        channel: "email",
+        audience: "manager_nudge",
+        recipientRef: manager.work_email,
+        subject: `A note for ${name} today`,
+        body:
+          `${name} is being celebrated today. A line from you means more than anything we send.\n\n` +
+          `Here's one you can use as-is, or make your own:\n\n"${suggestion}"`,
+        idempotencyKey: ctx.idempotencyKey("manager:email"),
+      });
+    }
+
+    if (managerPhone) {
+      // It suggests words; it never sends them as the manager.
+      await send(ctx, {
+        orgId: event.org_id,
+        momentEventId: event.id,
+        taskId: ctx.task.id,
+        channel: "sms",
+        audience: "manager_nudge",
+        recipientRef: managerPhone,
+        body: `${name} is being celebrated today. A line from you means a lot. Try: "${suggestion}"`,
+        idempotencyKey: ctx.idempotencyKey("manager:sms"),
+      });
+    }
 
     return { status: "done", result: { nudged: true } };
   },

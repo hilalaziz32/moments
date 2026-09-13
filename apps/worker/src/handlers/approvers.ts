@@ -9,7 +9,7 @@ import type { TaskContext } from "../poller/types.js";
 export async function approverEmails(
   db: TaskContext["db"],
   orgId: string,
-): Promise<{ email: string; name: string }[]> {
+): Promise<{ email: string; name: string; phone: string | null }[]> {
   const { data: members } = await db
     .from("org_members")
     .select("user_id")
@@ -22,10 +22,12 @@ export async function approverEmails(
 
   const { data: profiles } = await db
     .from("profiles")
-    .select("id, email, full_name")
+    .select("id, email, full_name, phone_e164")
     .in("id", ids);
 
   return (profiles ?? [])
     .filter((p: { email: string | null }) => Boolean(p.email))
-    .map((p: { email: string; full_name: string }) => ({ email: p.email, name: p.full_name }));
+    .map((p: { email: string; full_name: string; phone_e164: string | null }) => ({
+      email: p.email, name: p.full_name, phone: p.phone_e164,
+    }));
 }

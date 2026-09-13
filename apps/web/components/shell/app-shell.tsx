@@ -19,6 +19,7 @@ export function AppShell({
     { href: "/approvals", label: "Approvals", show: canManagePeople(org.role) },
     { href: "/employees", label: "Team", show: canManagePeople(org.role) },
     { href: "/settings/moments", label: "Budgets", show: canManagePeople(org.role) },
+    { href: "/settings/messages", label: "Messages", show: canManagePeople(org.role) },
     { href: "/billing", label: "Billing", show: canManageBilling(org.role) },
     { href: "/ops", label: "Ops", show: user.isPlatformStaff },
   ].filter((n) => n.show);

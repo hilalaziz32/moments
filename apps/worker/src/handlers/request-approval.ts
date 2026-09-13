@@ -6,6 +6,7 @@ import { config } from "../config.js";
 import { send } from "./channel.js";
 import { mintToken, hashSecret, sixDigitCode } from "./tokens.js";
 import { approverEmails } from "./approvers.js";
+import { smsSettings } from "./sms.js";
 import { formatDay } from "./format.js";
 
 /** Above this, a bare click on a forwardable link is not enough. PKR 10,000. */
@@ -150,7 +151,37 @@ export const requestApproval: TaskHandler = {
       ? `We've picked ${meta.selectedName}, ${formatPKR(amount)} (budget ${formatPKR(event.budget_paisa)}).`
       : `The budget is ${formatPKR(event.budget_paisa)}.`;
 
+    const sms = await smsSettings(ctx.db, event.org_id);
+
     for (const a of approvers) {
+      if (sms.enabled && a.phone) {
+        await send(ctx, {
+          orgId: event.org_id,
+          momentEventId: event.id,
+          taskId: ctx.task.id,
+          channel: "sms",
+          audience: "approval_request",
+          recipientRef: a.phone,
+          body: `Approve a ${formatPKR(amount)} gift for ${name}'s ${label.toLowerCase()}? ${url}`,
+          idempotencyKey: ctx.idempotencyKey(`approval-sms:${tokenId}:${a.phone}`),
+        });
+        if (otp) {
+          // A separate message from the link, so a forwarded link alone can't
+          // approve a large amount.
+          await send(ctx, {
+            orgId: event.org_id,
+            momentEventId: event.id,
+            taskId: ctx.task.id,
+            channel: "sms",
+            audience: "approval_request",
+            recipientRef: a.phone,
+            body: `Your Moments approval code is ${otp}. Don't share it.`,
+            idempotencyKey: ctx.idempotencyKey(`approval-code-sms:${tokenId}:${a.phone}`),
+            sensitive: true,
+          });
+        }
+      }
+
       await send(ctx, {
         orgId: event.org_id,
         momentEventId: event.id,

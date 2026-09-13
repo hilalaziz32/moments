@@ -1,6 +1,6 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { computeMomentPlans, estimateCost, NEW_HIRE_LOOKBACK_DAYS } from "./compute-plan.js";
+import { computeMomentPlans, estimateCost, LIFE_EVENT_LOOKBACK_DAYS, NEW_HIRE_LOOKBACK_DAYS } from "./compute-plan.js";
 import type { EmployeeForPlanning, OrgForPlanning, PolicyForPlanning } from "./types.js";
 
 const ORG: OrgForPlanning = {
@@ -314,6 +314,104 @@ describe("the onboarding cost estimate", () => {
     const est = estimateCost(r);
     assert.equal(est.momentCount, 3);
     assert.equal(est.totalBudgetPaisa, 750_000); // PKR 7,500
+  });
+});
+
+describe("life events: the moments nobody's spreadsheet has", () => {
+  const promo = { id: "ev-1", employeeId: "emp-bilal", momentKey: "promotion" as const, eventDate: "2026-09-20", isCelebrated: true };
+
+  test("a logged promotion becomes one moment, keyed on the event row", () => {
+    const r = computeMomentPlans({
+      org: ORG, employees: [employee({ dateOfBirth: null, hireDate: null })],
+      policies: [policy({ momentKey: "promotion", budgetPaisa: 500_000 })],
+      today: "2026-09-12", lifeEvents: [promo],
+    });
+    assert.equal(r.plans.length, 1);
+    assert.equal(r.plans[0]!.occurrenceKey, "evt:ev-1");
+    assert.equal(r.plans[0]!.occursOn, "2026-09-20");
+    assert.equal(r.plans[0]!.budgetPaisa, 500_000);
+  });
+
+  test(`logged up to ${LIFE_EVENT_LOOKBACK_DAYS} days late is still celebrated; later is not`, () => {
+    const run = (eventDate: string) => computeMomentPlans({
+      org: ORG, employees: [employee({ dateOfBirth: null, hireDate: null })],
+      policies: [policy({ momentKey: "promotion" })],
+      today: "2026-09-12", lifeEvents: [{ ...promo, eventDate }],
+    });
+    assert.equal(run("2026-09-05").plans.length, 1);
+    assert.equal(run("2026-09-04").plans.length, 0);
+    assert.equal(run("2026-09-04").suppressed[0]!.reason, "outside_horizon");
+  });
+
+  test("an event marked not-to-celebrate, or with its moment switched off, plans nothing", () => {
+    const off = computeMomentPlans({
+      org: ORG, employees: [employee({ dateOfBirth: null, hireDate: null })],
+      policies: [policy({ momentKey: "promotion" })],
+      today: "2026-09-12", lifeEvents: [{ ...promo, isCelebrated: false }],
+    });
+    assert.equal(off.plans.length, 0);
+
+    const disabled = computeMomentPlans({
+      org: ORG, employees: [employee({ dateOfBirth: null, hireDate: null })],
+      policies: [policy({ momentKey: "promotion", enabled: false })],
+      today: "2026-09-12", lifeEvents: [promo],
+    });
+    assert.equal(disabled.plans.length, 0);
+  });
+
+  test("someone who has left gets no promotion moment", () => {
+    const r = computeMomentPlans({
+      org: ORG,
+      employees: [employee({ status: "exited", exitDate: "2026-09-01", dateOfBirth: null, hireDate: null })],
+      policies: [policy({ momentKey: "promotion" })],
+      today: "2026-09-12", lifeEvents: [promo],
+    });
+    assert.equal(r.plans.length, 0);
+  });
+});
+
+describe("farewells follow the exit date", () => {
+  const leaving = employee({ status: "notice_period", exitDate: "2026-09-30", exitReason: "resigned", dateOfBirth: null, hireDate: "2021-01-10" });
+
+  test("setting a last day plans the farewell for that day at 16:00", () => {
+    const r = computeMomentPlans({
+      org: ORG, employees: [leaving],
+      policies: [policy({ momentKey: "farewell", announcementLocalTime: "16:00" })],
+      today: "2026-09-12",
+    });
+    assert.equal(r.plans.length, 1);
+    assert.equal(r.plans[0]!.occurrenceKey, "exit:2026-09-30");
+    assert.equal(r.plans[0]!.tasks.find((t) => t.taskType === "announce")!.atTime, "16:00");
+  });
+
+  test("an autopilot never celebrates someone terminated for cause", () => {
+    const r = computeMomentPlans({
+      org: ORG, employees: [{ ...leaving, exitReason: "terminated_for_cause" }],
+      policies: [policy({ momentKey: "farewell" })],
+      today: "2026-09-12",
+    });
+    assert.equal(r.plans.length, 0);
+    assert.equal(r.suppressed[0]!.reason, "terminated_for_cause");
+  });
+
+  test("a hand-logged farewell and an exit date make ONE farewell, not two", () => {
+    const r = computeMomentPlans({
+      org: ORG, employees: [leaving],
+      policies: [policy({ momentKey: "farewell" })],
+      today: "2026-09-12",
+      lifeEvents: [{ id: "ev-9", employeeId: leaving.id, momentKey: "farewell", eventDate: "2026-09-29", isCelebrated: true }],
+    });
+    assert.equal(r.plans.length, 1);
+    assert.equal(r.plans[0]!.occurrenceKey, "evt:ev-9");
+  });
+
+  test("a last day already in the past plans nothing", () => {
+    const r = computeMomentPlans({
+      org: ORG, employees: [{ ...leaving, exitDate: "2026-09-10" }],
+      policies: [policy({ momentKey: "farewell" })],
+      today: "2026-09-12",
+    });
+    assert.equal(r.plans.length, 0);
   });
 });
 

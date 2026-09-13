@@ -40,6 +40,18 @@ export interface EmployeeForPlanning {
   timezone: string | null;
 }
 
+/** Moments nobody's HR spreadsheet records: someone has to tell us about them. */
+export type LifeEventKey = "promotion" | "marriage" | "new_baby" | "farewell";
+
+/** A row of moments.employee_events, as the planner sees it. */
+export interface LifeEventForPlanning {
+  id: string;
+  employeeId: string;
+  momentKey: LifeEventKey;
+  eventDate: string;
+  isCelebrated: boolean;
+}
+
 export interface PolicyForPlanning {
   momentKey: MomentKey;
   momentTypeId: string;

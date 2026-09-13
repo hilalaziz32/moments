@@ -1,6 +1,6 @@
 import {
-  computeMomentPlans, type EmployeeForPlanning, type MomentKey,
-  type PolicyForPlanning, type PlannedTask,
+  addDays, computeMomentPlans, LIFE_EVENT_LOOKBACK_DAYS, type EmployeeForPlanning,
+  type LifeEventForPlanning, type MomentKey, type PolicyForPlanning, type PlannedTask,
 } from "@moments/core/schedule";
 import { db } from "../lib/supabase.js";
 import { logger } from "../lib/logger.js";
@@ -78,17 +78,37 @@ async function detectForOrg(
   today: string,
   horizonDays: number,
 ): Promise<{ events: number; tasks: number; suppressed: number }> {
-  const [{ data: employees }, { data: policies }] = await Promise.all([
+  const [{ data: employees }, { data: policies }, { data: lifeEvents }] = await Promise.all([
+    // `exited` is included on purpose: the planner gives them nothing except
+    // the farewell for a last day that is still ahead.
     db.from("employees")
       .select("id, status, date_of_birth, hire_date, exit_date, exit_reason, celebration_opt_out, timezone")
       .eq("org_id", org.id)
-      .is("deleted_at", null)
-      .in("status", ["active", "on_leave", "notice_period"]),
+      .is("deleted_at", null),
     db.from("moment_policies")
       .select("id, budget_paisa, verify_offset_days, select_offset_days, approval_offset_days, approval_required, announcement_enabled, announcement_local_time, announce_publicly, manager_nudge_enabled, moment_types(id, key)")
       .eq("org_id", org.id)
       .eq("is_enabled", true),
+    db.from("employee_events")
+      .select("id, employee_id, event_date, is_celebrated, moment_types(key)")
+      .eq("org_id", org.id)
+      .eq("is_celebrated", true)
+      .gte("event_date", addDays(today, -LIFE_EVENT_LOOKBACK_DAYS))
+      .lte("event_date", addDays(today, horizonDays)),
   ]);
+
+  const LIFE_KEYS = new Set(["promotion", "marriage", "new_baby", "farewell"]);
+  const planLifeEvents: LifeEventForPlanning[] = (lifeEvents ?? []).flatMap((ev) => {
+    const key = (ev.moment_types as unknown as { key: string } | null)?.key;
+    if (!key || !LIFE_KEYS.has(key)) return [];
+    return [{
+      id: ev.id,
+      employeeId: ev.employee_id,
+      momentKey: key as LifeEventForPlanning["momentKey"],
+      eventDate: ev.event_date,
+      isCelebrated: ev.is_celebrated,
+    }];
+  });
 
   const typeIdByKey = new Map<string, string>();
   const planPolicies: PolicyForPlanning[] = (policies ?? []).map((p) => {
@@ -126,6 +146,7 @@ async function detectForOrg(
     },
     employees: roster,
     policies: planPolicies,
+    lifeEvents: planLifeEvents,
     today,
     horizonDays,
     observances: observances
