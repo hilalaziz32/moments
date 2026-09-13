@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { webConfig } from "@/lib/config";
@@ -10,6 +11,21 @@ export type ActionResult =
   | { success: true }
   | { error: string; fieldErrors?: Record<string, string> };
 
+
+/**
+ * Where links in auth emails should point. NEXT_PUBLIC_APP_URL when it is set;
+ * otherwise the host this request came in on. Falling back to localhost sent
+ * every confirmation email from the live site to a dead localhost link.
+ */
+async function appOrigin(): Promise<string> {
+  const configured = process.env.NEXT_PUBLIC_APP_URL?.trim();
+  if (configured && !configured.includes("localhost")) return configured.replace(/\/$/, "");
+  const h = await headers();
+  const host = h.get("x-forwarded-host") ?? h.get("host");
+  if (!host) return webConfig.app.url;
+  const proto = h.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
+  return `${proto}://${host}`;
+}
 
 export async function login(_prev: unknown, formData: FormData): Promise<ActionResult> {
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
@@ -54,7 +70,7 @@ export async function signup(_prev: unknown, formData: FormData): Promise<Action
     password,
     options: {
       data: { full_name: fullName },
-      emailRedirectTo: `${webConfig.app.url}/auth/callback?next=/setup`,
+      emailRedirectTo: `${await appOrigin()}/auth/callback?next=/setup`,
     },
   });
 
