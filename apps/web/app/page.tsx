@@ -6,7 +6,9 @@ import { DateMark } from "@/components/moments/date-mark";
 import { Pipeline } from "@/components/moments/pipeline";
 
 export default async function Home() {
-  const user = await getCurrentUser();
+  // The landing page must render even if auth is unreachable or unconfigured:
+  // it is the one page that explains what Moments is.
+  const user = await getCurrentUser().catch(() => null);
   if (user) redirect("/dashboard");
 
   return (
