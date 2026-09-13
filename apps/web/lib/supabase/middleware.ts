@@ -10,7 +10,7 @@ import type { Database } from "./types";
  */
 const PUBLIC_PREFIXES = [
   "/login", "/signup", "/forgot-password", "/reset-password", "/set-password",
-  "/accept-invite", "/auth/callback", "/auth/confirm",
+  "/accept-invite", "/join/", "/check-email", "/auth/callback", "/auth/confirm",
   "/c/", "/a/", "/f/", "/i/",
   "/api/slack", "/api/whatsapp", "/api/email", "/api/twilio", "/api/health",
 ];

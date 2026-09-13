@@ -12,6 +12,7 @@ const STEPS = [
   { href: "/setup",         label: "Company" },
   { href: "/setup/import",  label: "Your team" },
   { href: "/setup/budgets", label: "Budgets" },
+  { href: "/setup/messages", label: "Messages" },
   { href: "/setup/review",  label: "Go live" },
 ] as const;
 

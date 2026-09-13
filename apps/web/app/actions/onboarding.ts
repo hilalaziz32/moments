@@ -233,6 +233,22 @@ export async function saveBudgets(
 
   revalidatePath("/", "layout");
   if (mode === "settings") return { success: true };
+  redirect("/setup/messages");
+}
+
+/* ------------------------------------------------------------------ step 5 */
+
+/** Leaves the messages step, remembering it was seen so setup resumes past it. */
+export async function finishMessagesStep(): Promise<void> {
+  const org = await requireOrg();
+  if (!org.onboardingState.messages_seen_at) {
+    const supabase = await createClient();
+    await supabase
+      .from("organizations")
+      .update({ onboarding_state: { ...org.onboardingState, messages_seen_at: new Date().toISOString() } as never })
+      .eq("id", org.orgId);
+  }
+  revalidatePath("/", "layout");
   redirect("/setup/review");
 }
 

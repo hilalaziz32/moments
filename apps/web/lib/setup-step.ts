@@ -24,5 +24,6 @@ export async function resumeSetupPath(org: ActiveOrg): Promise<string> {
 
   if (!count) return "/setup/import";
   if (!org.onboardingState.budgets_saved_at) return "/setup/budgets";
+  if (!org.onboardingState.messages_seen_at) return "/setup/messages";
   return "/setup/review";
 }

@@ -3,6 +3,8 @@ import { signOut } from "@/app/actions/auth";
 import type { ActiveOrg } from "@/lib/auth/org";
 import type { CurrentUser } from "@/lib/auth/guard";
 import { canManageBilling, canManagePeople } from "@/lib/auth/org";
+import { ROLE_LABEL } from "@/lib/invitations";
+import { NavLinks } from "./nav-links";
 
 export function AppShell({
   org, user, resumeHref, children,
@@ -18,12 +20,11 @@ export function AppShell({
     { href: "/moments", label: "Moments", show: true },
     { href: "/approvals", label: "Approvals", show: canManagePeople(org.role) },
     { href: "/employees", label: "Team", show: canManagePeople(org.role) },
-    { href: "/settings/moments", label: "Budgets", show: canManagePeople(org.role) },
-    { href: "/settings/messages", label: "Messages", show: canManagePeople(org.role) },
     { href: "/billing", label: "Billing", show: canManageBilling(org.role) },
+    { href: "/settings", label: "Settings", show: true },
     { href: "/ops", label: "Ops", show: user.isPlatformStaff },
     { href: "/admin", label: "Admin", show: user.isSuperAdmin },
-  ].filter((n) => n.show);
+  ].filter((n) => n.show).map(({ href, label }) => ({ href, label }));
 
   const initials = (user.fullName || user.email || "?")
     .split(/\s+/).slice(0, 2).map((p) => p[0]?.toUpperCase() ?? "").join("");
@@ -31,31 +32,37 @@ export function AppShell({
   return (
     <div className="min-h-dvh">
       <header className="border-b border-rule bg-surface">
-        <div className="mx-auto flex max-w-5xl items-center gap-6 px-6 py-3">
-          <Link href="/dashboard" className="text-sm font-semibold tracking-tight text-ink">
+        <div className="mx-auto flex max-w-5xl items-center gap-4 px-4 py-3 sm:gap-6 sm:px-6">
+          <Link href="/dashboard" className="shrink-0 text-sm font-semibold tracking-tight text-ink">
             Moments
           </Link>
-          <nav className="flex flex-1 items-center gap-1 overflow-x-auto">
-            {nav.map((n) => (
-              <Link
-                key={n.href}
-                href={n.href}
-                className="rounded-md px-2.5 py-1.5 text-sm text-ink-muted transition-colors hover:bg-surface-sunk hover:text-ink"
-              >
-                {n.label}
-              </Link>
-            ))}
-          </nav>
-          <span className="hidden text-xs text-ink-faint sm:block">{org.orgName}</span>
-          <form action={signOut}>
-            <button
-              type="submit"
-              title={`Signed in as ${user.email ?? ""} — sign out`}
-              className="flex size-7 items-center justify-center rounded-full bg-surface-sunk text-[11px] font-medium text-ink transition-colors hover:bg-rule"
+          <NavLinks items={nav} />
+
+          {/* A real menu. Clicking your initials used to sign you out on the spot. */}
+          <details className="group relative shrink-0">
+            <summary
+              className="flex size-8 cursor-pointer list-none items-center justify-center rounded-full bg-surface-sunk text-[11px] font-medium text-ink transition-colors hover:bg-rule [&::-webkit-details-marker]:hidden"
+              aria-label="Account menu"
             >
               {initials}
-            </button>
-          </form>
+            </summary>
+            <div className="absolute right-0 z-30 mt-2 w-60 rounded-lg border border-rule bg-card p-1 shadow-lg">
+              <div className="px-3 py-2">
+                <p className="truncate text-sm font-medium text-ink">{user.fullName || user.email}</p>
+                <p className="truncate text-xs text-ink-muted">{org.orgName} · {ROLE_LABEL[org.role] ?? org.role}</p>
+              </div>
+              <div className="my-1 h-px bg-rule" />
+              <Link href="/settings/profile" className="block rounded-md px-3 py-2 text-sm text-ink hover:bg-surface-sunk">Your profile</Link>
+              {canManagePeople(org.role) && (
+                <Link href="/settings/team" className="block rounded-md px-3 py-2 text-sm text-ink hover:bg-surface-sunk">Invite teammates</Link>
+              )}
+              <form action={signOut}>
+                <button type="submit" className="block w-full rounded-md px-3 py-2 text-left text-sm text-ink hover:bg-surface-sunk">
+                  Sign out
+                </button>
+              </form>
+            </div>
+          </details>
         </div>
       </header>
 
@@ -68,7 +75,7 @@ export function AppShell({
         </p>
       )}
 
-      <main className="mx-auto max-w-5xl px-6 py-8">{children}</main>
+      <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6">{children}</main>
     </div>
   );
 }

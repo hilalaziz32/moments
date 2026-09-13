@@ -1,35 +1,25 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { webConfig } from "@/lib/config";
+import { appOrigin } from "@/lib/origin";
 import { isSuperAdminUser } from "@/lib/auth/super-admin";
 
 export type ActionResult =
   | { success: true }
   | { error: string; fieldErrors?: Record<string, string> };
 
-
-/**
- * Where links in auth emails should point. NEXT_PUBLIC_APP_URL when it is set;
- * otherwise the host this request came in on. Falling back to localhost sent
- * every confirmation email from the live site to a dead localhost link.
- */
-async function appOrigin(): Promise<string> {
-  const configured = process.env.NEXT_PUBLIC_APP_URL?.trim();
-  if (configured && !configured.includes("localhost")) return configured.replace(/\/$/, "");
-  const h = await headers();
-  const host = h.get("x-forwarded-host") ?? h.get("host");
-  if (!host) return webConfig.app.url;
-  const proto = h.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
-  return `${proto}://${host}`;
+/** Same-site paths only, so ?next= can never send someone to another site. */
+function safeNext(value: FormDataEntryValue | null): string | null {
+  const s = String(value ?? "");
+  return s.startsWith("/") && !s.startsWith("//") && !s.startsWith("/\\") ? s : null;
 }
 
 export async function login(_prev: unknown, formData: FormData): Promise<ActionResult> {
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const password = String(formData.get("password") ?? "");
+  const next = safeNext(formData.get("next"));
 
   const fieldErrors: Record<string, string> = {};
   if (!email) fieldErrors.email = "Enter your work email.";
@@ -42,19 +32,23 @@ export async function login(_prev: unknown, formData: FormData): Promise<ActionR
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
   if (error) {
+    if (error.message.toLowerCase().includes("not confirmed")) {
+      return { error: "Confirm your email first. Check your inbox for the link we sent." };
+    }
     // Deliberately does not distinguish "no such account" from "wrong password":
     // that difference is an account-enumeration oracle.
     return { error: "That email and password don't match. Try again." };
   }
 
   revalidatePath("/", "layout");
-  redirect(isSuperAdminUser(data.user) ? "/admin" : "/dashboard");
+  redirect(next ?? (isSuperAdminUser(data.user) ? "/admin" : "/dashboard"));
 }
 
 export async function signup(_prev: unknown, formData: FormData): Promise<ActionResult> {
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const password = String(formData.get("password") ?? "");
   const fullName = String(formData.get("fullName") ?? "").trim();
+  const next = safeNext(formData.get("next"));
 
   const fieldErrors: Record<string, string> = {};
   if (!fullName) fieldErrors.fullName = "Tell us your name.";
@@ -65,19 +59,22 @@ export async function signup(_prev: unknown, formData: FormData): Promise<Action
   }
 
   const supabase = await createClient();
-  const { error } = await supabase.auth.signUp({
+  const { data, error } = await supabase.auth.signUp({
     email,
     password,
     options: {
       data: { full_name: fullName },
-      emailRedirectTo: `${await appOrigin()}/auth/callback?next=/setup`,
+      emailRedirectTo: `${await appOrigin()}/auth/callback?next=${encodeURIComponent(next ?? "/setup")}`,
     },
   });
 
   if (error) return { error: error.message };
 
   revalidatePath("/", "layout");
-  redirect("/setup");
+  // With email confirmation on there is no session yet: say so, rather than
+  // bouncing them to a sign-in page that will refuse them.
+  if (!data.session) redirect(`/check-email?email=${encodeURIComponent(email)}`);
+  redirect(next ?? "/setup");
 }
 
 /** Sends a reset link. Always reports success, so it can't reveal who has an account. */
