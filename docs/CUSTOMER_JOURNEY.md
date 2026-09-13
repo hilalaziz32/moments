@@ -39,6 +39,10 @@ us take seconds.
 - The detector plans logged news (`evt:<id>`) and farewells from the exit date
   (`exit:<date>`), and runs right after news is logged when the worker is reachable.
 
+- **Monthly SMS to HR** (1st, 10:00): "Any promotions, weddings, babies or people
+  leaving this month?" with a link to the Team page. Plus a Monday 09:30 summary of the
+  week's celebrations and anything stuck.
+
 ### Next, in order of how much they reduce "we didn't know"
 
 1. **"Share good news" link for managers.** A company link HR can pin in Slack or a
@@ -46,8 +50,25 @@ us take seconds.
    Needs a `news_submissions` table and an anonymous RPC.
 2. **Re-import notices a changed job title** and asks "was this a promotion?" instead of
    silently updating it.
-3. **Monthly SMS to HR**: "Any promotions, weddings, babies or people leaving this
-   month?" with a link straight to the Team page.
+
+## What a paying customer can do today
+
+| Journey | Where |
+|---|---|
+| Sign up, confirm, reset a forgotten password | `/signup`, `/check-email`, `/forgot-password` |
+| Set up: company → team → budgets → messages → go live, resumable | `/setup/*` |
+| See this fortnight, the next 90 days, and what needs them | `/dashboard` |
+| Follow one moment end to end, with word-for-word message previews | `/moments/[id]` |
+| Add, edit, remove a person; log news; set a last day | `/employees/*` |
+| Invite HR, finance and managers with a shareable link; change roles | `/settings/team`, `/join/[token]` |
+| Company, tax, announcement time and rules | `/settings/company` |
+| Budgets with what each amount buys | `/settings/moments` |
+| SMS on/off, test phone, test text, every text previewed | `/settings/messages` |
+| Who changed what, append-only | `/settings/activity` |
+| Plan, invoices, report a bank transfer | `/billing` |
+
+Moments are planned the instant HR goes live, imports, changes budgets or people, not
+only by the nightly worker.
 
 ## The HR admin's journey
 

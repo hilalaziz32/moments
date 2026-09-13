@@ -53,7 +53,10 @@ export function Pipeline({
             {showLabels && (
               <span className="flex flex-col items-center">
                 <span className="text-[11px] font-medium text-ink">{step.label}</span>
-                {step.when && <time className="text-[11px] text-ink-faint">{step.when}</time>}
+                {/* Always reserve the date line, or an undated step sits lower than its neighbours. */}
+                {step.when
+                  ? <time className="text-[11px] text-ink-faint">{step.when}</time>
+                  : <span aria-hidden className="text-[11px] text-ink-faint">&nbsp;</span>}
               </span>
             )}
           </div>
